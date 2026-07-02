@@ -1,0 +1,57 @@
+{
+  "appName": "FIFA Career Narrative Companion",
+  "tagline": "Run your career mode with intention — offline, on your terms.",
+  "apiBaseUrl": "/api",
+  "dataPath": "/data",
+  "editions": [15, 16, 17, 18, 19, 20],
+  "playersFilePattern": "players_{edition}.csv",
+  "clubColumn": "club",
+  "playerColumns": {
+    "id": "sofifa_id",
+    "name": "short_name",
+    "fullName": "long_name",
+    "club": "club",
+    "overall": "overall",
+    "potential": "potential",
+    "value": "value_eur",
+    "wage": "wage_eur",
+    "positions": "player_positions",
+    "nationality": "nationality",
+    "age": "age"
+  },
+  "setupActions": [
+    {
+      "id": "club-archive",
+      "label": "Club Archive",
+      "description": "Browse how clubs evolved across FIFA editions.",
+      "route": "section",
+      "icon": "archive"
+    }
+  ],
+  "sections": [
+    {
+      "id": "club-context",
+      "label": "Club Context",
+      "description": "Generated philosophy, budget guidance, and era narratives from squad data.",
+      "icon": "shield"
+    },
+    {
+      "id": "objectives-matches",
+      "label": "Objectives & Matches",
+      "description": "Generated board goals plus fixture tracking for your save.",
+      "icon": "target"
+    },
+    {
+      "id": "roster-tools",
+      "label": "Roster Tools",
+      "description": "Search players and explore signing suggestions that fit your club.",
+      "icon": "users"
+    },
+    {
+      "id": "journal",
+      "label": "Career Narrative",
+      "description": "Auto-generated storylines, arcs, and long-term save direction.",
+      "icon": "book"
+    }
+  ]
+}

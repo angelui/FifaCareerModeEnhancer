@@ -1,0 +1,17 @@
+FIFA Career Narrative Companion is an offline desktop sidecar for FIFA/FC career mode. You play the game yourself;
+the app does not read or modify saves.
+
+It helps you run a career more deliberately by giving you:
+
+- Club context — philosophy, budget limits, and era-specific narrative per year or years for your team.
+- Objectives & matches — board goals and important fixtures to track manually (based on rivalry and distance in km).
+- Roster tools — search players and get signing suggestions that fit your club and budget.
+  Ex-players of the team or future players of the team if I play Fifa 15 and that player signs for a team in Fifa 18
+  must enter in signing suggests.
+- Journal — notes per season.
+- Club archive — browse how clubs changed across FIFA/FC editions.
+
+Dataset covers from FIFA 15 to FIFA 20.
+
+In the first section you should select FIFA version and team of your Career Mode. You have Club Archive in this first
+section too. Then you enter in other options menu: Club Context, Objectives & Matches, Roster Tools, Journal.

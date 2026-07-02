@@ -1,0 +1,137 @@
+# FIFA Career Narrative Companion — run commands
+
+## Which URL to open in the browser
+
+**Only one URL for the app UI:**
+
+http://localhost:5173
+
+Port **8000** is the **backend API** (Python/FastAPI). You do not open it in the browser to use the app.
+The frontend on 5173 proxies `/api/*` to 8000 automatically.
+
+You need **two terminals** (backend + frontend), but **one browser tab** (5173).
+
+## If you see two frontend ports (5173 and 5174)
+
+That means two `npm run dev` processes are running. Vite picks 5174 when 5173 is busy.
+
+Fix — stop all Vite servers, then start one:
+
+```powershell
+# See what is listening (PowerShell or Git Bash)
+netstat -ano | findstr ":5173"
+netstat -ano | findstr ":5174"
+
+# Kill by PID from the LISTENING line (last column), e.g.:
+taskkill //PID 15728 //F
+taskkill //PID 23124 //F
+
+# In PowerShell use single slash: taskkill /PID 15728 /F
+
+# Then start fresh (one terminal only):
+cd frontend
+npm.cmd run dev
+```
+
+Vite is configured with `strictPort: true` so a second start will fail loudly instead of silently using 5174.
+
+## Backend (FastAPI + pandas)
+
+From project root:
+
+```powershell
+# Create / activate virtual environment (first time)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# Install Python dependencies (first time or after requirements change)
+pip install -r requirements.txt
+
+# Start API on http://127.0.0.1:8000 (background — no browser UI here)
+uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Health check (optional): http://127.0.0.1:8000/api/health
+
+**After pulling code changes**, restart the backend (Ctrl+C then run uvicorn again). An old process without `--reload` will not expose new routes like `/api/bootstrap/*` and the loading screen will show "Not Found".
+
+## Frontend (Vite)
+
+From project root:
+
+```powershell
+cd frontend
+npm.cmd install
+npm.cmd run dev
+```
+
+App URL: http://localhost:5173
+
+If `npm` fails with "running scripts is disabled" in PowerShell, use `npm.cmd` (above) or run once:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+## Run both (two terminals, one browser URL)
+
+1. Terminal 1 — backend: `uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000`
+2. Terminal 2 — frontend: `cd frontend; npm.cmd run dev`
+3. Browser — open: http://localhost:5173
+
+On first open the app shows a **bootstrap loading screen** that preloads all FIFA 15–20 CSV datasets into the backend cache. Wait until all steps are green before using setup/archive.
+
+## Production build (frontend only)
+
+```powershell
+cd frontend
+npm.cmd run build
+npm.cmd run preview
+```
+
+Note: `npm run preview` still expects the backend running for API calls.
+
+## API endpoints (via frontend proxy or direct on :8000)
+
+- `GET /api/health`
+- `GET /api/bootstrap/status` — preload progress (steps, percent, elapsed)
+- `POST /api/bootstrap/start` — begin preloading all edition CSVs into memory
+- `GET /api/editions/{edition}/clubs`
+- `GET /api/clubs`
+- `GET /api/editions/{edition}/players/search?q=...&limit=50`
+- `GET /api/editions/{edition}/players?club=...`
+- `GET /api/clubs/archive?club=...`
+- `GET /api/editions/{edition}/narrative?club=...` — generated philosophy, budget, era narratives, storylines
+- `GET /api/editions/{edition}/signing-suggestions?club=...&max_value=...&max_wage=...&limit=40` — ex-players, future players, and other value+wage signings
+- `GET /api/editions/{edition}/fixture-hints?club=...&limit=24` — rivals, nearest clubs (km), and mixed fixture suggestions
+
+## Career sections (after setup)
+
+1. **Setup** — pick FIFA edition + club, optional Club Archive from setup screen
+2. **Career hub** — Club Context (generated), Objectives & Matches, Roster Tools, Career Narrative
+3. Fixture/objective progress persists in browser `localStorage` per edition+club
+
+## Club menu loading / progress bar
+
+- Each hub section renders HTML first, then `bindSection()` attaches loaders with an elapsed timer.
+- Hard-refresh (Ctrl+Shift+R) after frontend changes if sections stay stuck at `0.0s elapsed`.
+- Career setup (edition + club) is required; otherwise you see a red "Career not configured" panel.
+- First narrative load per club may take a few seconds; the timer should still tick while waiting.
+
+## Regenerate teams list (FIFA 15–20)
+
+```powershell
+python -c "import re,pandas as pd; from pathlib import Path; root=Path('data'); files=sorted(root.glob('players_*.csv')); clubs_by={}; 
+for f in files:
+    m=re.search(r'players_(\d+)\.csv$', f.name)
+    if not m:
+        continue
+    year=int(m.group(1))
+    df=pd.read_csv(f)
+    df['club']=df['club'].astype('string').str.strip()
+    df=df.dropna(subset=['club'])
+    for c in df['club'].unique():
+        clubs_by.setdefault(str(c),set()).add(str(year))
+out=[{'club':c,'versions':'|'.join(sorted(v,key=int))} for c,v in clubs_by.items()]
+pd.DataFrame(out).sort_values('club').to_csv(root/'teams_15_20.csv', index=False, encoding='utf-8')"
+```
