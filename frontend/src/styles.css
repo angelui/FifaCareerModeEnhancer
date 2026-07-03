@@ -83,6 +83,51 @@ select {
   background: rgba(216, 192, 137, 0.14);
 }
 
+.hero {
+  margin-bottom: 3rem;
+  position: relative;
+}
+
+.hero h1 {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  background: linear-gradient(135deg, var(--text) 30%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 2px 20px rgba(124, 227, 168, 0.1);
+  margin-top: 0.5rem;
+}
+
+.hero .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(216, 192, 137, 0.08);
+  border: 1px solid rgba(216, 192, 137, 0.18);
+  color: var(--gold);
+  padding: 0.35rem 1rem;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin-bottom: 0.5rem;
+}
+
+.hero .lead {
+  font-size: 1.15rem;
+  color: var(--text-muted);
+  margin-top: 0.75rem;
+  max-width: 48rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
 .hero,
 .topbar,
 .section-header {
@@ -1519,3 +1564,72 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+
+/* Setup page sidebar layout */
+.setup-container {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 2rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+
+.setup-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.setup-menu-btn {
+  width: 100%;
+  text-align: left;
+  justify-content: flex-start;
+  padding: 0.85rem 1.25rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  transition: all 0.2s ease;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.setup-menu-btn:hover {
+  background: var(--bg-soft);
+  border-color: var(--accent-strong);
+}
+
+.setup-menu-btn.active {
+  background: var(--bg-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 12px rgba(124, 227, 168, 0.15);
+}
+
+.setup-content {
+  min-width: 0;
+}
+
+.setup-pane {
+  display: none;
+}
+
+.setup-pane.active {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .setup-container {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  .setup-sidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .setup-menu-btn {
+    width: auto;
+    flex: 1 1 auto;
+  }
+}
+

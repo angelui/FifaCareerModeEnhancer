@@ -1,0 +1,17 @@
+----- Terminal 1 GIT BASH: Backend (FastAPI)
+# 1. Create the virtual environment (first time only)
+python -m venv .venv
+# 2. Activate the virtual environment in Git Bash
+source .venv/Scripts/activate
+# 3. Install Python dependencies
+pip install -r requirements.txt
+# 4. Start the FastAPI backend
+uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+
+----- Terminal 2 POWERSHELL: Frontend (Vite)
+# 1. Navigate to the frontend directory
+cd frontend
+# 2. Install Node dependencies (first time or if package.json changes)
+npm install
+# 3. Start the Vite development server
+npm.cmd run dev

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from .config import editions, load_app_config
 from . import bootstrap, data
+from .saves import CareerSaveState, list_profiles, load_state, save_state
 
 app = FastAPI(
     title="FIFA Career Narrative Companion API",
@@ -169,3 +171,84 @@ def club_narrative(
 def _ensure_edition(edition: int) -> None:
     if edition not in editions():
         raise HTTPException(status_code=404, detail=f"FIFA {edition} is not configured.")
+
+
+class CareerSaveStatePayload(BaseModel):
+    edition: int
+    team: str
+    profileId: str
+    profileName: str | None = None
+    season: int | None = None
+    objectives: list[dict] = []
+    matches: list[dict] = []
+
+
+@app.get("/api/career-saves/profiles")
+def career_save_profiles(
+    edition: int,
+    team: str = Query(min_length=1),
+) -> dict:
+    _ensure_edition(edition)
+    profiles = list_profiles(edition, team.strip())
+    return {
+        "edition": edition,
+        "team": team.strip(),
+        "count": len(profiles),
+        "profiles": profiles,
+    }
+
+
+@app.get("/api/career-saves/state")
+def career_save_state(
+    edition: int,
+    team: str = Query(min_length=1),
+    profileId: str = Query(min_length=1),
+) -> dict:
+    _ensure_edition(edition)
+    state = load_state(edition, team.strip(), profileId.strip())
+    return {
+        "edition": edition,
+        "team": team.strip(),
+        "profileId": profileId.strip(),
+        "season": state.season,
+        "objectives": state.objectives,
+        "matches": state.matches,
+    }
+
+
+@app.post("/api/career-saves/state")
+def career_save_write(payload: CareerSaveStatePayload = Body(...)) -> dict:
+    _ensure_edition(int(payload.edition))
+    season = int(payload.season) if payload.season is not None else 1
+    state = CareerSaveState(season=season, objectives=payload.objectives or [], matches=payload.matches or [])
+    save_state(
+        edition=int(payload.edition),
+        team=payload.team.strip(),
+        profile_id=payload.profileId.strip(),
+        profile_name=payload.profileName or payload.profileId.strip(),
+        state=state,
+    )
+    return {"ok": True}
+
+
+@app.get("/api/editions/{edition}/random-club")
+def random_club(edition: int) -> dict:
+    _ensure_edition(edition)
+    try:
+        return data.random_club(edition)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+
+@app.get("/api/editions/{edition}/random-player")
+def random_player(edition: int) -> dict:
+    _ensure_edition(edition)
+    try:
+        return data.random_player(edition)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+

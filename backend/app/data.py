@@ -427,3 +427,141 @@ def club_narrative(edition: int, club_name: str) -> dict:
         future_players=suggestions.get("futurePlayers") or [],
         ex_players=suggestions.get("exPlayers") or [],
     )
+
+
+def random_club(edition: int) -> dict:
+    import random
+
+    clubs = list_clubs_for_edition(edition)
+    if not clubs:
+        raise ValueError(f"No clubs found for edition {edition}")
+    club_name = random.choice(clubs)
+
+    players = players_for_club(edition, club_name)
+    summary = summarize_squad(players)
+
+    # Let's extract prospects and seniors
+    # Prospects: age < 23, not in top 3 players, sorted by potential descending, then overall descending
+    top_3_ids = {p["id"] for p in summary["topPlayers"] if p.get("id")}
+
+    prospects_pool = [
+        p
+        for p in players
+        if p.get("id") not in top_3_ids
+        and isinstance(p.get("age"), (int, float))
+        and p["age"] < 23
+    ]
+    prospects_pool.sort(
+        key=lambda x: (-int(x.get("potential") or 0), -int(x.get("overall") or 0))
+    )
+    prospects = prospects_pool[:2]
+
+    # Seniors: age >= 30, not in top 3 players, sorted by overall descending
+    seniors_pool = [
+        p
+        for p in players
+        if p.get("id") not in top_3_ids
+        and isinstance(p.get("age"), (int, float))
+        and p["age"] >= 30
+    ]
+    seniors_pool.sort(key=lambda x: -int(x.get("overall") or 0))
+
+    if not seniors_pool:
+        # Fallback to oldest players not in top 3
+        fallback_pool = [
+            p
+            for p in players
+            if p.get("id") not in top_3_ids
+            and isinstance(p.get("age"), (int, float))
+        ]
+        fallback_pool.sort(
+            key=lambda x: (-int(x.get("age") or 0), -int(x.get("overall") or 0))
+        )
+        seniors = fallback_pool[:2]
+    else:
+        seniors = seniors_pool[:2]
+
+    return {
+        "club": club_name,
+        "edition": edition,
+        "best11Overall": summary["best11Overall"],
+        "nationalityCounts": summary["nationalityCounts"],
+        "topPlayers": summary["topPlayers"],
+        "prospects": prospects,
+        "seniors": seniors,
+    }
+
+
+def random_player(edition: int) -> dict:
+    import random
+
+    frame = load_players_frame(edition)
+    if frame.empty:
+        raise ValueError(f"No players found for edition {edition}")
+
+    row_idx = random.randint(0, len(frame) - 1)
+    row = frame.iloc[row_idx]
+
+    player_dict = {}
+    for col in frame.columns:
+        val = row[col]
+        if pd.isna(val):
+            player_dict[col] = ""
+        else:
+            if hasattr(val, "item"):
+                val = val.item()
+            player_dict[col] = val
+
+    positions_str = str(player_dict.get("player_positions", ""))
+    is_gk = "GK" in [pos.strip().upper() for pos in positions_str.split(",")]
+
+    stats = {}
+    if is_gk:
+        stats_keys = [
+            "gk_diving",
+            "gk_handling",
+            "gk_kicking",
+            "gk_reflexes",
+            "gk_speed",
+            "gk_positioning",
+        ]
+        for k in stats_keys:
+            val = player_dict.get(k)
+            if val == "" or val is None:
+                gk_sub = k.replace("gk_", "goalkeeping_")
+                val = player_dict.get(gk_sub, 50)
+            stats[k] = (
+                int(val) if str(val).isdigit() or isinstance(val, (int, float)) else 50
+            )
+    else:
+        stats_keys = ["pace", "shooting", "passing", "dribbling", "defending", "physic"]
+        for k in stats_keys:
+            val = player_dict.get(k)
+            stats[k] = (
+                int(val) if str(val).isdigit() or isinstance(val, (int, float)) else 50
+            )
+
+    return {
+        "id": str(player_dict.get("sofifa_id", "")),
+        "name": str(player_dict.get("short_name", "")),
+        "fullName": str(player_dict.get("long_name", "")),
+        "club": str(player_dict.get("club", "")),
+        "overall": int(player_dict.get("overall", 50))
+        if player_dict.get("overall")
+        else 50,
+        "potential": int(player_dict.get("potential", 50))
+        if player_dict.get("potential")
+        else 50,
+        "value": int(player_dict.get("value_eur", 0))
+        if player_dict.get("value_eur")
+        else 0,
+        "wage": int(player_dict.get("wage_eur", 0))
+        if player_dict.get("wage_eur")
+        else 0,
+        "positions": positions_str,
+        "nationality": str(player_dict.get("nationality", "")),
+        "age": int(player_dict.get("age", 20)) if player_dict.get("age") else 20,
+        "isGoalkeeper": is_gk,
+        "stats": stats,
+    }
+

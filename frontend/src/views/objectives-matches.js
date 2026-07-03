@@ -147,7 +147,7 @@ function renderRelationSection(title, description, items, { emptyMessage, action
 }
 
 export async function renderObjectivesMatches({ career }) {
-  const data = loadCareerData(career);
+  const data = await loadCareerData(career);
 
   return renderSectionShell({
     career,
@@ -250,7 +250,7 @@ export async function renderObjectivesMatches({ career }) {
   });
 }
 
-export function bindObjectivesMatches({ career, scope }) {
+export async function bindObjectivesMatches({ career, scope }) {
   if (!scope?.isActive()) return;
 
   const generatedRoot = document.getElementById("generated-objectives-body");
@@ -263,7 +263,7 @@ export function bindObjectivesMatches({ career, scope }) {
 
   if (!assertCareerReady(career, generatedRoot)) return;
 
-  let state = loadCareerData(career);
+  let state = await loadCareerData(career);
 
   const persist = () => saveCareerData(career, state);
 

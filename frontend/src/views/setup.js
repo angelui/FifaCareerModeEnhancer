@@ -4,7 +4,15 @@ import { saveCareer } from "../state.js";
 import { navigate } from "../router.js";
 import { escapeHtml, icon } from "../ui.js";
 import { formatLoadError, mountCombobox, renderCombobox } from "../ui/combobox.js";
-import { fetchHealth } from "../api.js";
+import {
+  fetchCareerSaveProfiles,
+  fetchHealth,
+  saveCareerSaveState,
+  fetchRandomClub,
+  fetchRandomPlayer,
+} from "../api.js";
+import { bindClubArchive } from "./club-archive.js";
+import { renderClubPicker, formatMoney } from "./section-shell.js";
 
 function renderShell(config, content) {
   return `
@@ -44,6 +52,191 @@ function renderSetupActions(config) {
     .join("");
 }
 
+
+function renderRandomClubInfo(data) {
+  const { club, edition, best11Overall, nationalityCounts, topPlayers, prospects, seniors } = data;
+
+  const sortedNations = Object.entries(nationalityCounts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 8);
+  const moreNationsCount = Math.max(0, Object.keys(nationalityCounts).length - 8);
+  const nationsHtml = sortedNations
+    .map(([nation, count]) => `<span class="pill pill-muted">${escapeHtml(nation)} (${count})</span>`)
+    .join(" ");
+  const moreNationsHtml = moreNationsCount ? `<span class="pill pill-muted">+${moreNationsCount} more</span>` : "";
+
+  const topPlayersHtml = topPlayers
+    .map(p => `
+      <li style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--line);">
+        <span><strong>${escapeHtml(p.name)}</strong> <small style="color: var(--text-muted);">${escapeHtml(p.positions)}</small></span>
+        <span><span class="rating">${p.overall}</span> OVR</span>
+      </li>
+    `).join("");
+
+  const prospectsHtml = prospects.length ? prospects
+    .map(p => `
+      <li style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--line);">
+        <span><strong>${escapeHtml(p.name)}</strong> <small style="color: var(--text-muted);">${escapeHtml(p.positions)} (Age ${p.age})</small></span>
+        <span><span class="rating">${p.overall}</span> OVR · <span style="color: var(--accent);">${p.potential}</span> POT</span>
+      </li>
+    `).join("") : `<p class="status status-muted">No prospects under 23 found.</p>`;
+
+  const seniorsHtml = seniors.length ? seniors
+    .map(p => `
+      <li style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--line);">
+        <span><strong>${escapeHtml(p.name)}</strong> <small style="color: var(--text-muted);">${escapeHtml(p.positions)} (Age ${p.age})</small></span>
+        <span><span class="rating">${p.overall}</span> OVR</span>
+      </li>
+    `).join("") : `<p class="status status-muted">No senior players found.</p>`;
+
+  return `
+    <div class="panel section-panel" style="animation: setup-fade-in 0.3s ease-out; margin-top: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 1rem; margin-bottom: 1rem;">
+        <div>
+          <h3 style="margin: 0; font-size: 1.5rem; color: var(--accent);">${escapeHtml(club)}</h3>
+          <p style="margin: 0.25rem 0 0; color: var(--text-muted);">FIFA ${edition} Dataset</p>
+        </div>
+        <div style="text-align: right;">
+          <span class="stat-label" style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);">Best XI OVR</span>
+          <span class="stat-value" style="font-size: 2rem; font-weight: bold; color: var(--gold);">${best11Overall}</span>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <h4 style="margin: 0 0 0.5rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">Squad Nationalities</h4>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+          ${nationsHtml}
+          ${moreNationsHtml}
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div>
+          <h4 style="margin: 0 0 0.5rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem;">
+            ${icon("shield", "icon-inline")} Key Players (Top 3)
+          </h4>
+          <ul style="list-style: none; padding: 0; margin: 0;">
+            ${topPlayersHtml}
+          </ul>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div>
+          <h4 style="margin: 0 0 0.5rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem;">
+            ${icon("target", "icon-inline")} Prospects (Under 23)
+          </h4>
+          <ul style="list-style: none; padding: 0; margin: 0;">
+            ${prospectsHtml}
+          </ul>
+        </div>
+        <div>
+          <h4 style="margin: 0 0 0.5rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem;">
+            ${icon("users", "icon-inline")} Senior Leaders
+          </h4>
+          <ul style="list-style: none; padding: 0; margin: 0;">
+            ${seniorsHtml}
+          </ul>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 1rem; border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1rem;">
+        <button type="button" class="btn btn-ghost" id="random-club-inspect-btn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+          ${icon("archive", "icon-inline")} View in Club Archive
+        </button>
+        <button type="button" class="btn btn-primary" id="random-club-select-btn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+          ${icon("arrow", "icon-inline")} Select for Career
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+
+function renderRandomPlayerInfo(player) {
+  const { name, fullName, club, overall, potential, value, wage, positions, nationality, age, isGoalkeeper, stats } = player;
+
+  const statBars = Object.entries(stats)
+    .map(([key, val]) => {
+      const label = key.replace("gk_", "GK ").replace("_", " ").toUpperCase();
+      let ratingColor = "#ff4d4d";
+      if (val >= 80) ratingColor = "var(--accent-strong)";
+      else if (val >= 70) ratingColor = "var(--accent)";
+      else if (val >= 60) ratingColor = "var(--gold)";
+      else if (val >= 50) ratingColor = "#ffa64d";
+
+      return `
+        <div style="margin-bottom: 0.75rem;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.25rem;">
+            <span style="font-weight: 600; color: var(--text-muted);">${escapeHtml(label)}</span>
+            <span style="font-weight: bold; color: ${ratingColor};">${val}</span>
+          </div>
+          <div style="height: 8px; background: var(--bg-soft); border-radius: 4px; overflow: hidden; border: 1px solid var(--line);">
+            <div style="height: 100%; width: ${val}%; background: ${ratingColor}; border-radius: 4px; transition: width 0.6s ease-out;"></div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+  return `
+    <div class="panel section-panel" style="animation: setup-fade-in 0.3s ease-out; margin-top: 1.5rem;">
+      <div style="display: grid; grid-template-columns: 1fr; gap: 1.5rem;">
+        <div style="display: flex; gap: 1.5rem; border-bottom: 1px solid var(--line); padding-bottom: 1.25rem; align-items: center; flex-wrap: wrap;">
+          <div style="width: 72px; height: 72px; background: var(--bg-soft); border: 2px solid var(--gold); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.75rem; font-weight: bold; color: var(--gold);">
+            ${overall}
+          </div>
+          <div style="flex: 1; min-width: 200px;">
+            <h3 style="margin: 0; font-size: 1.5rem; color: var(--text);">${escapeHtml(name)}</h3>
+            <p style="margin: 0.15rem 0 0.5rem; font-size: 0.9rem; color: var(--text-muted);">${escapeHtml(fullName)}</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+              <span class="pill">${escapeHtml(positions)}</span>
+              <span class="pill pill-muted">${escapeHtml(nationality)}</span>
+              <span class="pill pill-muted">Age ${age}</span>
+            </div>
+          </div>
+          <div style="text-align: right; min-width: 120px;">
+            <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Potential</p>
+            <p style="margin: 0; font-size: 1.5rem; font-weight: bold; color: var(--accent);">${potential} POT</p>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 2rem; align-items: start; flex-wrap: wrap;">
+          <div style="display: grid; gap: 1.25rem;">
+            <div>
+              <h4 style="margin: 0 0 0.25rem; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted);">Current Club</h4>
+              <p style="margin: 0; font-size: 1.15rem; font-weight: 600; color: var(--accent);">${escapeHtml(club || "Free Agent")}</p>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+              <div>
+                <h4 style="margin: 0 0 0.25rem; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted);">Value</h4>
+                <p style="margin: 0; font-size: 1.15rem; font-weight: 600; color: var(--gold);">${formatMoney(value)}</p>
+              </div>
+              <div>
+                <h4 style="margin: 0 0 0.25rem; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted);">Weekly Wage</h4>
+                <p style="margin: 0; font-size: 1.15rem; font-weight: 600; color: var(--gold);">${formatMoney(wage)}</p>
+              </div>
+            </div>
+            <div style="border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 0.5rem;">
+              <button type="button" class="btn btn-ghost" id="random-player-club-inspect-btn" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;" ${club ? "" : "disabled"}>
+                ${icon("shield", "icon-inline")} Inspect ${escapeHtml(club || "Club")}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <h4 style="margin: 0 0 1rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between;">
+              <span>Key Attributes</span>
+              <span style="font-size: 0.75rem; font-weight: normal; text-transform: none; color: var(--text-muted);">${isGoalkeeper ? "Goalkeeper Stats" : "Outfield Stats"}</span>
+            </h4>
+            ${statBars}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
 export async function renderSetup({ config, career }) {
   const editionOptions = config.editions
     .map(
@@ -57,88 +250,156 @@ export async function renderSetup({ config, career }) {
   const html = renderShell(
     config,
     `
-      <section id="setup-panel" class="panel setup-panel">
-        <div class="panel-header">
-          <h2>Start your career</h2>
-          <p>Choose the FIFA edition and club you are managing.</p>
-        </div>
-
-        <form id="setup-form" class="setup-form">
-          <p id="backend-status" class="setup-backend-status" hidden role="alert"></p>
-          <p class="setup-env-note">
-            Open this app at <strong>http://localhost:5173</strong> only.
-            Port 8000 is the API (backend) — not the web UI.
-          </p>
-          <div id="edition-field" class="field field-edition">
-            <label for="edition-select">
-              <span>FIFA edition</span>
-            </label>
-            <div class="edition-control">
-              <select id="edition-select" name="edition" required>
-                <option value="" disabled ${hasEdition ? "" : "selected"}>Select edition</option>
-                ${editionOptions}
-              </select>
-              <button type="button" id="edition-apply-btn" class="btn btn-primary edition-apply-btn" disabled>
-                Load edition
-              </button>
-              <span id="edition-spinner" class="edition-spinner" hidden aria-hidden="true"></span>
-            </div>
-
-            <div id="edition-feedback" class="edition-feedback edition-feedback-idle" aria-live="assertive">
-              <p id="edition-feedback-title" class="edition-feedback-title">
-                Step 1 — choose your FIFA year
-              </p>
-              <p id="edition-feedback-detail" class="edition-feedback-detail">
-                Pick a year in the dropdown, then click <strong>Load edition</strong>. Progress appears here.
-              </p>
-              <div id="edition-progress" class="edition-progress edition-progress-idle">
-                <div id="edition-progress-fill" class="edition-progress-fill"></div>
-              </div>
-              <p id="edition-elapsed" class="edition-elapsed edition-elapsed-idle">Waiting for edition…</p>
-              <button type="button" id="setup-retry-btn" class="btn btn-ghost setup-retry-btn" hidden>
-                Retry loading clubs
-              </button>
-            </div>
-          </div>
-
-          <div id="club-field-wrap" class="club-field-wrap club-field-wrap-locked">
-            ${renderCombobox({
-              idPrefix: "team",
-              label: "Club",
-              placeholder: "Select a FIFA edition first",
-              disabled: true,
-              hint: "Choose a year and click Load edition above.",
-              hintVariant: "info",
-              selectedValue: career.team ?? "",
-              required: true,
-              inputName: "team",
-            })}
-          </div>
-
-          <div id="profile-field-wrap" style="opacity: ${career.team ? 1 : 0.72}; ${career.team ? "" : "pointer-events: none;"}">
-            <label for="profile-name" class="field">
-              <span>Career profile (per club)</span>
-              <input
-                id="profile-name"
-                type="text"
-                placeholder="Default"
-                value="${escapeHtml(career.profileName ?? "Default")}"
-                autocomplete="off"
-              />
-            </label>
-            <p class="form-hint">Customizations will be saved under this profile only.</p>
-          </div>
-
-          <div class="setup-actions">
-            ${renderSetupActions(config)}
-          </div>
-
-          <button type="submit" class="btn btn-primary btn-wide" id="continue-btn" disabled>
-            Enter career hub
-            ${icon("arrow", "icon-inline")}
+      <div class="setup-container">
+        <aside class="setup-sidebar">
+          <button type="button" id="menu-btn-career" class="setup-menu-btn active">
+            ${icon("arrow", "icon-inline")} Start your Career
           </button>
-        </form>
-      </section>
+          <button type="button" id="menu-btn-archive" class="setup-menu-btn">
+            ${icon("archive", "icon-inline")} Club Archive
+          </button>
+          <button type="button" id="menu-btn-random" class="setup-menu-btn">
+            ${icon("users", "icon-inline")} Random Selection
+          </button>
+        </aside>
+
+        <div class="setup-content">
+          <!-- Pane 1: Start your Career -->
+          <div id="pane-career" class="setup-pane active">
+            <section id="setup-panel" class="panel setup-panel">
+              <div class="panel-header">
+                <h2>Start your career</h2>
+                <p>Choose the FIFA edition and club you are managing.</p>
+              </div>
+
+              <form id="setup-form" class="setup-form">
+                <p id="backend-status" class="setup-backend-status" hidden role="alert"></p>
+                <p class="setup-env-note">
+                  Open this app at <strong>http://localhost:5173</strong> only.
+                  Port 8000 is the API (backend) — not the web UI.
+                </p>
+                <div id="edition-field" class="field field-edition">
+                  <label for="edition-select">
+                    <span>FIFA edition</span>
+                  </label>
+                  <div class="edition-control">
+                    <select id="edition-select" name="edition" required>
+                      <option value="" disabled ${hasEdition ? "" : "selected"}>Select edition</option>
+                      ${editionOptions}
+                    </select>
+                    <button type="button" id="edition-apply-btn" class="btn btn-primary edition-apply-btn" disabled>
+                      Load edition
+                    </button>
+                    <span id="edition-spinner" class="edition-spinner" hidden aria-hidden="true"></span>
+                  </div>
+
+                  <div id="edition-feedback" class="edition-feedback edition-feedback-idle" aria-live="assertive">
+                    <p id="edition-feedback-title" class="edition-feedback-title">
+                      Step 1 — choose your FIFA year
+                    </p>
+                    <p id="edition-feedback-detail" class="edition-feedback-detail">
+                      Pick a year in the dropdown, then click <strong>Load edition</strong>. Progress appears here.
+                    </p>
+                    <div id="edition-progress" class="edition-progress edition-progress-idle">
+                      <div id="edition-progress-fill" class="edition-progress-fill"></div>
+                    </div>
+                    <p id="edition-elapsed" class="edition-elapsed edition-elapsed-idle">Waiting for edition…</p>
+                  </div>
+                </div>
+
+                <div id="club-field-wrap" class="club-field-wrap club-field-wrap-locked">
+                  ${renderCombobox({
+                    idPrefix: "team",
+                    label: "Club",
+                    placeholder: "Select a FIFA edition first",
+                    disabled: true,
+                    hint: "Choose a year and click Load edition above.",
+                    hintVariant: "info",
+                    selectedValue: career.team ?? "",
+                    required: true,
+                    inputName: "team",
+                  })}
+                </div>
+
+                <div id="profile-field-wrap" style="opacity: ${career.team ? 1 : 0.72}; ${career.team ? "" : "pointer-events: none;"}">
+                  <label for="profile-name" class="field">
+                    <span>Career profile (per club)</span>
+                    <input
+                      id="profile-name"
+                      type="text"
+                      placeholder="Default"
+                      list="profile-list"
+                      value="${escapeHtml(career.profileName ?? "Default")}"
+                      autocomplete="off"
+                    />
+                  </label>
+                  <datalist id="profile-list"></datalist>
+                  <p class="form-hint">Customizations will be saved under this profile only.</p>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-wide" id="continue-btn" disabled>
+                  Enter career hub
+                  ${icon("arrow", "icon-inline")}
+                </button>
+              </form>
+            </section>
+          </div>
+
+          <!-- Pane 2: Club Archive -->
+          <div id="pane-archive" class="setup-pane">
+            <section class="panel setup-panel">
+              <div class="panel-header">
+                <h2>Club Archive</h2>
+                <p>Browse how clubs evolved across FIFA editions.</p>
+              </div>
+              <div class="archive-controls" style="margin-top: 1.5rem;">
+                <div id="archive-club-picker">
+                  ${renderClubPicker({
+                    idPrefix: "archive-club",
+                    selectedClub: career.team ?? "",
+                    label: "Club to inspect",
+                    placeholder: career.team ? career.team : "Select a club to inspect…",
+                    hint: "Preparing club index…",
+                    hintVariant: "loading",
+                    disabled: true,
+                  })}
+                </div>
+                <div id="archive-status" style="margin-top: 1rem;"></div>
+              </div>
+              <div id="archive-timeline" style="margin-top: 1.5rem;"></div>
+            </section>
+          </div>
+
+          <!-- Pane 3: Random Selection -->
+          <div id="pane-random" class="setup-pane">
+            <section class="panel setup-panel">
+              <div class="panel-header">
+                <h2>Random Selection</h2>
+                <p>Generate a random club or player from a chosen FIFA edition.</p>
+              </div>
+              <div class="random-controls" style="margin-top: 1.5rem; display: grid; gap: 1.25rem;">
+                <div class="field">
+                  <label for="random-edition-select">
+                    <span>FIFA edition</span>
+                  </label>
+                  <select id="random-edition-select" class="select-field" style="width: 100%; padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--bg-elevated); color: var(--text);">
+                    ${config.editions.map(edition => `<option value="${edition}">FIFA ${edition}</option>`).join("")}
+                  </select>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                  <button type="button" id="random-club-btn" class="btn btn-ghost" style="padding: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                    ${icon("shield", "icon-inline")} Generate Random Club
+                  </button>
+                  <button type="button" id="random-player-btn" class="btn btn-ghost" style="padding: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                    ${icon("users", "icon-inline")} Generate Random Player
+                  </button>
+                </div>
+              </div>
+              <div id="random-result" style="margin-top: 1rem;"></div>
+            </section>
+          </div>
+        </div>
+      </div>
     `,
   );
 
@@ -218,7 +479,7 @@ function setEditionFeedback(phase, details = {}) {
   }
 
   if (spinner) spinner.hidden = phase !== "loading";
-  retryBtn.hidden = phase !== "error";
+  if (retryBtn) retryBtn.hidden = phase !== "error";
 
   if (phase === "idle") {
     progress.className = "edition-progress edition-progress-idle";
@@ -349,12 +610,148 @@ export function bindSetupForm(config, career) {
     return;
   }
 
+  const profileList = document.getElementById("profile-list");
+  let profileFetchGeneration = 0;
+  const localCareerDataKey = "fifa-cm-career-data";
+
+  const populateProfileSuggestions = (teamValue) => {
+    if (!profileList) return;
+    profileList.innerHTML = "";
+
+    const edition = Number(editionSelect.value);
+    const team = teamValue ?? combobox?.getValue?.() ?? "";
+    if (!edition || !team) return;
+
+    const currentGen = ++profileFetchGeneration;
+    fetchCareerSaveProfiles(edition, team)
+      .then((payload) => {
+        if (!profileList) return;
+        if (currentGen !== profileFetchGeneration) return;
+        const profiles = payload?.profiles ?? [];
+        const renderProfiles = (items) => {
+          profileList.innerHTML = items.map((p) => `<option value="${escapeHtml(p.profileName)}"></option>`).join("");
+        };
+
+        if (profiles.length) {
+          renderProfiles(profiles);
+          return;
+        }
+
+        const migrateAndReload = async () => {
+          try {
+            const raw = localStorage.getItem(localCareerDataKey);
+            const store = raw ? JSON.parse(raw) : {};
+            const prefix = `${edition}|${team}|`;
+
+            const keys = Object.keys(store);
+            const relevant = keys.filter((k) => k === `${edition}|${team}` || k.startsWith(prefix));
+            if (!relevant.length) return;
+
+            const savePromises = relevant.map((key) => {
+              if (key === `${edition}|${team}`) {
+                const value = store[key] ?? {};
+                return saveCareerSaveState({
+                  edition,
+                  team,
+                  profileId: "default",
+                  profileName: "Default",
+                  season: Number(value.season ?? 1),
+                  objectives: Array.isArray(value.objectives) ? value.objectives : [],
+                  matches: Array.isArray(value.matches) ? value.matches : [],
+                });
+              }
+
+              const profileId = key.split("|")[2] ?? "default";
+              const value = store[key] ?? {};
+              return saveCareerSaveState({
+                edition,
+                team,
+                profileId,
+                profileName: profileId === "default" ? "Default" : profileId,
+                season: Number(value.season ?? 1),
+                objectives: Array.isArray(value.objectives) ? value.objectives : [],
+                matches: Array.isArray(value.matches) ? value.matches : [],
+              });
+            });
+
+            await Promise.all(savePromises);
+
+            const retry = await fetchCareerSaveProfiles(edition, team);
+            const nextProfiles = retry?.profiles ?? [];
+            if (currentGen !== profileFetchGeneration) return;
+            renderProfiles(nextProfiles);
+          } catch {
+            // ignore migration errors, keep suggestions empty
+          }
+        };
+
+        migrateAndReload();
+      })
+      .catch(() => {
+        if (currentGen !== profileFetchGeneration) return;
+        profileList.innerHTML = "";
+      });
+  };
+
   const combobox = mountCombobox("team", {
     items: [],
     selectedValue: career.team ?? "",
     disabled: true,
-    onSelect: updateContinueState,
+    onSelect: (value) => {
+      updateContinueState();
+      populateProfileSuggestions(value);
+    },
   });
+
+  // Tab switching logic
+  const menuBtnCareer = document.getElementById("menu-btn-career");
+  const menuBtnArchive = document.getElementById("menu-btn-archive");
+  const menuBtnRandom = document.getElementById("menu-btn-random");
+
+  const paneCareer = document.getElementById("pane-career");
+  const paneArchive = document.getElementById("pane-archive");
+  const paneRandom = document.getElementById("pane-random");
+
+  let archiveBound = false;
+
+  const switchTab = (tabId) => {
+    menuBtnCareer?.classList.remove("active");
+    menuBtnArchive?.classList.remove("active");
+    menuBtnRandom?.classList.remove("active");
+
+    if (paneCareer) paneCareer.style.display = "none";
+    if (paneArchive) paneArchive.style.display = "none";
+    if (paneRandom) paneRandom.style.display = "none";
+
+    if (tabId === "career") {
+      menuBtnCareer?.classList.add("active");
+      if (paneCareer) paneCareer.style.display = "block";
+    } else if (tabId === "archive") {
+      menuBtnArchive?.classList.add("active");
+      if (paneArchive) paneArchive.style.display = "block";
+
+      if (!archiveBound) {
+        archiveBound = true;
+        bindClubArchive({
+          config,
+          career,
+          scope: {
+            isActive: () => paneArchive && paneArchive.style.display !== "none"
+          },
+          params: {
+            team: combobox?.getValue() || career.team || ""
+          }
+        });
+      }
+    } else if (tabId === "random") {
+      menuBtnRandom?.classList.add("active");
+      if (paneRandom) paneRandom.style.display = "block";
+    }
+  };
+
+  menuBtnCareer?.addEventListener("click", () => switchTab("career"));
+  menuBtnArchive?.addEventListener("click", () => switchTab("archive"));
+  menuBtnRandom?.addEventListener("click", () => switchTab("random"));
 
   let loadGeneration = 0;
 
@@ -415,25 +812,99 @@ export function bindSetupForm(config, career) {
     navigate("home");
   });
 
-  // Ensure Club Archive gets the current picker selection even before the user saves the career.
-  document.querySelectorAll('[data-nav="section"][data-id="club-archive"]').forEach((button) => {
-    button.addEventListener("click", () => {
-      const edition = Number(editionSelect.value);
-      const team = combobox?.getValue() || "";
-      navigate("section", {
-        id: "club-archive",
-        origin: "setup",
-        edition: Number.isFinite(edition) && edition > 0 ? edition : "",
-        team,
-      });
+  // Random Selection tab logic
+  const randomClubBtn = document.getElementById("random-club-btn");
+  const randomPlayerBtn = document.getElementById("random-player-btn");
+  const randomEditionSelect = document.getElementById("random-edition-select");
+  const randomResult = document.getElementById("random-result");
+
+  if (randomClubBtn && randomPlayerBtn && randomEditionSelect && randomResult) {
+    randomClubBtn.addEventListener("click", async () => {
+      const edition = Number(randomEditionSelect.value);
+      randomResult.innerHTML = `
+        <div class="panel section-panel" style="text-align: center; padding: 2rem;">
+          <span class="edition-spinner" style="display: inline-block; margin-bottom: 1rem;"></span>
+          <p class="status">Generating random club for FIFA ${edition}…</p>
+        </div>
+      `;
+
+      try {
+        const data = await fetchRandomClub(edition);
+        randomResult.innerHTML = renderRandomClubInfo(data);
+
+        const inspectBtn = document.getElementById("random-club-inspect-btn");
+        const selectBtn = document.getElementById("random-club-select-btn");
+
+        if (inspectBtn) {
+          inspectBtn.addEventListener("click", () => {
+            navigate("section", {
+              id: "club-archive",
+              origin: "setup",
+              edition: edition,
+              team: data.club,
+            });
+          });
+        }
+
+        if (selectBtn) {
+          selectBtn.addEventListener("click", () => {
+            switchTab("career");
+            const editionSelect = document.getElementById("edition-select");
+            if (editionSelect) {
+              editionSelect.value = edition;
+              editionSelect.dispatchEvent(new Event("change"));
+              loadForCurrentEdition(data.club);
+            }
+          });
+        }
+      } catch (error) {
+        randomResult.innerHTML = `
+          <div class="panel section-panel" style="text-align: center; padding: 2rem; border-color: var(--line);">
+            <p class="status status-error">Error: ${escapeHtml(error.message)}</p>
+          </div>
+        `;
+      }
     });
-  });
+
+    randomPlayerBtn.addEventListener("click", async () => {
+      const edition = Number(randomEditionSelect.value);
+      randomResult.innerHTML = `
+        <div class="panel section-panel" style="text-align: center; padding: 2rem;">
+          <span class="edition-spinner" style="display: inline-block; margin-bottom: 1rem;"></span>
+          <p class="status">Generating random player for FIFA ${edition}…</p>
+        </div>
+      `;
+
+      try {
+        const player = await fetchRandomPlayer(edition);
+        randomResult.innerHTML = renderRandomPlayerInfo(player);
+
+        const inspectClubBtn = document.getElementById("random-player-club-inspect-btn");
+        if (inspectClubBtn && player.club) {
+          inspectClubBtn.addEventListener("click", () => {
+            navigate("section", {
+              id: "club-archive",
+              origin: "setup",
+              edition: edition,
+              team: player.club,
+            });
+          });
+        }
+      } catch (error) {
+        randomResult.innerHTML = `
+          <div class="panel section-panel" style="text-align: center; padding: 2rem; border-color: var(--line);">
+            <p class="status status-error">Error: ${escapeHtml(error.message)}</p>
+          </div>
+        `;
+      }
+    });
+  }
 
   checkBackendStatus();
   updateEditionApplyState();
 
   if (Number(career.edition) > 0 && combobox) {
-    loadForCurrentEdition(career.team);
+    loadForCurrentEdition(career.team).then(() => populateProfileSuggestions(career.team)).catch(() => {});
   } else {
     setEditionFeedback("idle");
     updateContinueState();

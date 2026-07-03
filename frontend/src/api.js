@@ -12,7 +12,11 @@ async function resolveApiBaseUrl() {
   return apiBaseUrlCache;
 }
 
-async function apiFetch(path, params = {}, { method = "GET", timeoutMs = DEFAULT_FETCH_TIMEOUT_MS } = {}) {
+async function apiFetch(
+  path,
+  params = {},
+  { method = "GET", timeoutMs = DEFAULT_FETCH_TIMEOUT_MS, body = undefined } = {},
+) {
   const base = await resolveApiBaseUrl();
   const url = new URL(`${base}${path}`, window.location.origin);
 
@@ -27,7 +31,12 @@ async function apiFetch(path, params = {}, { method = "GET", timeoutMs = DEFAULT
 
   let response;
   try {
-    response = await fetch(url.toString(), { method, signal: controller.signal });
+    response = await fetch(url.toString(), {
+      method,
+      signal: controller.signal,
+      headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
   } catch (error) {
     if (error?.name === "AbortError") {
       throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s (${path}).`);
@@ -115,3 +124,32 @@ export async function fetchFixtureHints(edition, clubName, limit = 24) {
 export async function fetchClubNarrative(edition, clubName) {
   return apiFetch(`/editions/${edition}/narrative`, { club: clubName }, { timeoutMs: 120000 });
 }
+
+export async function fetchCareerSaveProfiles(edition, team) {
+  const normalizedEdition = Number(edition);
+  return apiFetch(`/career-saves/profiles`, { edition: normalizedEdition, team: team ?? "" }, { timeoutMs: 30000 });
+}
+
+export async function fetchCareerSaveState(edition, team, profileId) {
+  const normalizedEdition = Number(edition);
+  return apiFetch(
+    `/career-saves/state`,
+    { edition: normalizedEdition, team: team ?? "", profileId: profileId ?? "" },
+    { timeoutMs: 30000 },
+  );
+}
+
+export async function saveCareerSaveState(payload) {
+  return apiFetch(`/career-saves/state`, {}, { method: "POST", body: payload, timeoutMs: 30000 });
+}
+
+export async function fetchRandomClub(edition) {
+  const normalizedEdition = Number(edition);
+  return apiFetch(`/editions/${normalizedEdition}/random-club`, {}, { timeoutMs: 30000 });
+}
+
+export async function fetchRandomPlayer(edition) {
+  const normalizedEdition = Number(edition);
+  return apiFetch(`/editions/${normalizedEdition}/random-player`, {}, { timeoutMs: 30000 });
+}
+
