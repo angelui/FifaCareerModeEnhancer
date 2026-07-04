@@ -128,11 +128,12 @@ def signing_suggestions(
     club: str = Query(min_length=1),
     max_value: int | None = Query(default=None, ge=0),
     max_wage: int | None = Query(default=None, ge=0),
+    position: str | None = Query(default=None, min_length=1),
     limit: int = Query(default=40, ge=1, le=100),
 ) -> dict:
     _ensure_edition(edition)
     try:
-        return data.signing_suggestions(edition, club.strip(), max_value, max_wage, limit)
+        return data.signing_suggestions(edition, club.strip(), max_value, max_wage, limit, position)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
@@ -181,6 +182,7 @@ class CareerSaveStatePayload(BaseModel):
     season: int | None = None
     objectives: list[dict] = []
     matches: list[dict] = []
+    transactions: list[dict] = []
 
 
 @app.get("/api/career-saves/profiles")
@@ -213,6 +215,7 @@ def career_save_state(
         "season": state.season,
         "objectives": state.objectives,
         "matches": state.matches,
+        "transactions": state.transactions,
     }
 
 
@@ -220,7 +223,12 @@ def career_save_state(
 def career_save_write(payload: CareerSaveStatePayload = Body(...)) -> dict:
     _ensure_edition(int(payload.edition))
     season = int(payload.season) if payload.season is not None else 1
-    state = CareerSaveState(season=season, objectives=payload.objectives or [], matches=payload.matches or [])
+    state = CareerSaveState(
+        season=season,
+        objectives=payload.objectives or [],
+        matches=payload.matches or [],
+        transactions=payload.transactions or [],
+    )
     save_state(
         edition=int(payload.edition),
         team=payload.team.strip(),
@@ -229,6 +237,17 @@ def career_save_write(payload: CareerSaveStatePayload = Body(...)) -> dict:
         state=state,
     )
     return {"ok": True}
+
+
+@app.get("/api/editions/{edition}/all-players")
+def list_all_players(edition: int) -> list[dict]:
+    _ensure_edition(edition)
+    try:
+        return data.list_all_players_in_edition(edition)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
 
 
 @app.get("/api/editions/{edition}/random-club")

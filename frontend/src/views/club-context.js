@@ -64,7 +64,10 @@ function renderEraTimeline(eras, activeEdition) {
       return `
         <article class="era-card${activeClass}">
           <div class="era-card-head">
-            <strong>FIFA ${era.edition}</strong>
+            <div style="display: flex; flex-direction: column; gap: 0.15rem;">
+              <strong>FIFA ${era.edition}</strong>
+              <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em;">${escapeHtml(era.league ?? "Unknown")}</span>
+            </div>
             ${delta}
           </div>
           <h4>${escapeHtml(era.headline ?? "")}</h4>

@@ -54,7 +54,7 @@ function renderSetupActions(config) {
 
 
 function renderRandomClubInfo(data) {
-  const { club, edition, best11Overall, nationalityCounts, topPlayers, prospects, seniors } = data;
+  const { club, edition, league, best11Overall, nationalityCounts, topPlayers, prospects, seniors } = data;
 
   const sortedNations = Object.entries(nationalityCounts)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -94,7 +94,7 @@ function renderRandomClubInfo(data) {
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 1rem; margin-bottom: 1rem;">
         <div>
           <h3 style="margin: 0; font-size: 1.5rem; color: var(--accent);">${escapeHtml(club)}</h3>
-          <p style="margin: 0.25rem 0 0; color: var(--text-muted);">FIFA ${edition} Dataset</p>
+          <p style="margin: 0.25rem 0 0; color: var(--text-muted);">FIFA ${edition} Dataset · ${escapeHtml(league ?? "Unknown")}</p>
         </div>
         <div style="text-align: right;">
           <span class="stat-label" style="display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);">Best XI OVR</span>

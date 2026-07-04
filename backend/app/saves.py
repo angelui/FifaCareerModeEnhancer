@@ -54,11 +54,16 @@ def matches_path(edition: int, team: str, profile_id: str) -> Path:
     return save_dir(edition, team, profile_id) / "matches.csv"
 
 
+def transactions_path(edition: int, team: str, profile_id: str) -> Path:
+    return save_dir(edition, team, profile_id) / "transactions.csv"
+
+
 @dataclass(frozen=True)
 class CareerSaveState:
     season: int
     objectives: list[dict]
     matches: list[dict]
+    transactions: list[dict]
 
 
 def _parse_bool(value) -> bool:
@@ -71,7 +76,7 @@ def _parse_bool(value) -> bool:
 
 
 def default_state() -> CareerSaveState:
-    return CareerSaveState(season=1, objectives=[], matches=[])
+    return CareerSaveState(season=1, objectives=[], matches=[], transactions=[])
 
 
 def list_profiles(edition: int, team: str) -> list[dict]:
@@ -175,7 +180,29 @@ def load_state(edition: int, team: str, profile_id: str) -> CareerSaveState:
         except Exception:
             matches = []
 
-    return CareerSaveState(season=state.season, objectives=objectives, matches=matches)
+    # transactions
+    txp = save_directory / "transactions.csv"
+    transactions: list[dict] = []
+    if txp.is_file():
+        try:
+            tx_df = pd.read_csv(txp, low_memory=False)
+            if not tx_df.empty:
+                for row in tx_df.to_dict(orient="records"):
+                    transactions.append(
+                        {
+                            "id": str(row.get("id") or ""),
+                            "playerName": str(row.get("playerName") or ""),
+                            "type": str(row.get("type") or ""),
+                            "details": str(row.get("details") or "") if pd.notna(row.get("details")) else "",
+                            "fee": str(row.get("fee") or "") if pd.notna(row.get("fee")) else "",
+                            "wage": str(row.get("wage") or "") if pd.notna(row.get("wage")) else "",
+                            "season": int(row.get("season") or 1),
+                        }
+                    )
+        except Exception:
+            transactions = []
+
+    return CareerSaveState(season=state.season, objectives=objectives, matches=matches, transactions=transactions)
 
 
 def save_state(
@@ -243,4 +270,26 @@ def save_state(
             columns=["id", "opponent", "date", "distanceKm", "isRivalry", "notes", "played", "result", "season"]
         )
     match_df.to_csv(matches_path(edition, team, profile_id), index=False, encoding="utf-8")
+
+    # transactions.csv
+    if state.transactions:
+        tx_df = pd.DataFrame(
+            [
+                {
+                    "id": t.get("id", ""),
+                    "playerName": t.get("playerName", ""),
+                    "type": t.get("type", ""),
+                    "details": t.get("details", ""),
+                    "fee": t.get("fee", ""),
+                    "wage": t.get("wage", ""),
+                    "season": int(t.get("season") or 1),
+                }
+                for t in state.transactions
+            ]
+        )
+    else:
+        tx_df = pd.DataFrame(
+            columns=["id", "playerName", "type", "details", "fee", "wage", "season"]
+        )
+    tx_df.to_csv(transactions_path(edition, team, profile_id), index=False, encoding="utf-8")
 

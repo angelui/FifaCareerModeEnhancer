@@ -33,9 +33,10 @@ export async function searchPlayers(_url, _playerColumns, query, limit = 40, edi
 
 export async function loadClubArchiveTimeline(clubName) {
   const payload = await fetchClubArchive(clubName);
-  return (payload.timeline ?? []).map(({ edition, summary }) => ({
+  return (payload.timeline ?? []).map(({ edition, summary, league }) => ({
     edition,
     summary: summary ?? { count: 0, avgOverall: null, best11Overall: null, subsOverall: null, topPlayers: [] },
+    league: league ?? null,
   }));
 }
 

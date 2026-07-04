@@ -10,7 +10,7 @@ import {
   renderStatus,
 } from "./section-shell.js";
 
-function renderEditionCard(edition, summary, activeEdition) {
+function renderEditionCard(edition, summary, activeEdition, league) {
   const activeClass = Number(edition) === Number(activeEdition) ? " era-card-active" : "";
   const count = summary?.count ?? 0;
 
@@ -61,7 +61,10 @@ function renderEditionCard(edition, summary, activeEdition) {
   return `
     <article class="era-card${activeClass}">
       <div class="era-card-head">
-        <strong>FIFA ${edition}</strong>
+        <div style="display: flex; flex-direction: column; gap: 0.15rem;">
+          <strong>FIFA ${edition}</strong>
+          <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em;">${escapeHtml(league ?? "Unknown")}</span>
+        </div>
         <span class="pill">${count} players</span>
       </div>
       <div class="era-stats era-stats-split">
@@ -91,7 +94,7 @@ function renderTimeline(editionData, activeEdition) {
   }
 
   const cards = editionData
-    .map(({ edition, summary }) => renderEditionCard(edition, summary, activeEdition))
+    .map(({ edition, summary, league }) => renderEditionCard(edition, summary, activeEdition, league))
     .join("");
 
   return `<section class="era-grid">${cards}</section>`;

@@ -1,5 +1,17 @@
 import { escapeHtml } from "../ui.js";
 
+function itemLabel(item) {
+  if (typeof item === "string") return item;
+  if (!item) return "";
+  return String(item.label ?? item.value ?? "");
+}
+
+function itemValue(item) {
+  if (typeof item === "string") return item;
+  if (!item) return "";
+  return String(item.value ?? "");
+}
+
 function normalize(value) {
   return value.trim().toLowerCase();
 }
@@ -7,7 +19,7 @@ function normalize(value) {
 function filterItems(items, query) {
   const normalized = normalize(query);
   if (!normalized) return items;
-  return items.filter((item) => item.toLowerCase().includes(normalized));
+  return items.filter((item) => itemLabel(item).toLowerCase().includes(normalized));
 }
 
 export function renderCombobox({
@@ -72,10 +84,21 @@ export function mountCombobox(idPrefix, options = {}) {
   let highlightedIndex = -1;
   let isOpen = false;
   let lastAutoSelected = selectedValue || "";
+  let valueToLabel = new Map();
+
+  function rebuildMaps() {
+    valueToLabel = new Map();
+    allItems.forEach((item) => {
+      const value = itemValue(item);
+      if (value !== "") valueToLabel.set(value, itemLabel(item));
+    });
+  }
+
+  rebuildMaps();
 
   function applyValue(value, { notify = true } = {}) {
     hidden.value = value;
-    input.value = value;
+    input.value = valueToLabel.get(value) ?? value;
     lastAutoSelected = value;
     if (notify && onSelect) onSelect(value);
   }
@@ -83,7 +106,16 @@ export function mountCombobox(idPrefix, options = {}) {
   const controller = {
     updateItems(nextItems, nextSelected = hidden.value, { renderList: renderListNow = true } = {}) {
       allItems = [...nextItems];
-      applyValue(nextSelected, { notify: false });
+      rebuildMaps();
+
+      // Preserve user's current typing when there is no explicit selection.
+      if (nextSelected !== "") {
+        applyValue(nextSelected, { notify: false });
+      } else {
+        hidden.value = "";
+        lastAutoSelected = "";
+      }
+
       if (renderListNow) {
         renderList(input.value, { preserveHighlight: false });
       }
@@ -145,10 +177,10 @@ export function mountCombobox(idPrefix, options = {}) {
   }
 
   function choose(value, { notify = true } = {}) {
-    if (!value) return;
+    if (value === undefined || value === null || value === "") return;
 
     hidden.value = value;
-    input.value = value;
+    input.value = valueToLabel.get(value) ?? value;
     lastAutoSelected = value;
     closeList();
     updateStatusFromQuery(value, { selected: true });
@@ -160,15 +192,16 @@ export function mountCombobox(idPrefix, options = {}) {
     if (!autoSelectSingle || filtered.length !== 1) return false;
 
     const [onlyMatch] = filtered;
-    if (onlyMatch === lastAutoSelected && hidden.value === onlyMatch) return true;
+    const onlyValue = itemValue(onlyMatch);
+    if (onlyValue === lastAutoSelected && hidden.value === onlyValue) return true;
 
-    choose(onlyMatch);
+    choose(onlyValue);
     return true;
   }
 
   function updateStatusFromQuery(query, { selected = false } = {}) {
     if (selected && hidden.value) {
-      controller.setStatus(`Selected: ${hidden.value}`, "success");
+      controller.setStatus(`Selected: ${valueToLabel.get(hidden.value) ?? hidden.value}`, "success");
       return;
     }
 
@@ -190,7 +223,7 @@ export function mountCombobox(idPrefix, options = {}) {
     }
 
     if (filtered.length === 1) {
-      controller.setStatus(`1 match found — press Enter to select "${filtered[0]}".`, "info");
+      controller.setStatus(`1 match found — press Enter to select "${itemLabel(filtered[0])}".`, "info");
       return;
     }
 
@@ -204,13 +237,13 @@ export function mountCombobox(idPrefix, options = {}) {
       .map(
         (item, index) => `
           <li
-            class="combobox-option ${hidden.value === item ? "is-selected" : ""}"
+            class="combobox-option ${hidden.value === itemValue(item) ? "is-selected" : ""}"
             role="option"
             data-index="${index}"
-            data-value="${escapeHtml(item)}"
-            aria-selected="${hidden.value === item ? "true" : "false"}"
+            data-value="${escapeHtml(itemValue(item))}"
+            aria-selected="${hidden.value === itemValue(item) ? "true" : "false"}"
           >
-            ${escapeHtml(item)}
+            ${escapeHtml(itemLabel(item))}
           </li>
         `,
       )
@@ -273,18 +306,18 @@ export function mountCombobox(idPrefix, options = {}) {
       event.preventDefault();
 
       if (highlightedIndex >= 0 && filtered[highlightedIndex]) {
-        choose(filtered[highlightedIndex]);
+        choose(itemValue(filtered[highlightedIndex]));
         return;
       }
 
       if (filtered.length === 1) {
-        choose(filtered[0]);
+        choose(itemValue(filtered[0]));
         return;
       }
 
-      const exact = filtered.find((item) => normalize(item) === normalize(input.value));
+      const exact = filtered.find((item) => normalize(itemLabel(item)) === normalize(input.value));
       if (exact) {
-        choose(exact);
+        choose(itemValue(exact));
         return;
       }
 
@@ -318,9 +351,9 @@ export function mountCombobox(idPrefix, options = {}) {
   list.addEventListener("mousedown", onListMouseDown);
   document.addEventListener("click", onDocumentClick);
 
-  if (selectedValue) {
+  if (selectedValue !== "") {
     hidden.value = selectedValue;
-    input.value = selectedValue;
+    input.value = valueToLabel.get(selectedValue) ?? selectedValue;
     lastAutoSelected = selectedValue;
     controller.setStatus(`Selected: ${selectedValue}`, "success");
   } else if (disabled) {

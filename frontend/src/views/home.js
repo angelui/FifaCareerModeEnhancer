@@ -27,9 +27,15 @@ export async function renderHome({ config, career }) {
     <div class="page home-page">
       <div class="ambient ambient-a"></div>
       <div class="ambient ambient-b"></div>
-      <div class="home-actions">
-        <button type="button" class="btn btn-ghost" id="change-career">Change club</button>
-      </div>
+
+      <header class="home-header panel">
+        <div class="home-header-top">
+          <button type="button" class="btn btn-ghost" id="change-career">Change club</button>
+        </div>
+        <div id="home-career-panel" class="home-career-panel">
+          <p class="form-hint">Loading career overview…</p>
+        </div>
+      </header>
 
       <main class="home-grid">
         ${sectionCards}

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from functools import lru_cache
 
 import pandas as pd
 
-from .config import club_column, editions, player_columns, players_csv_path
-from .club_relations import build_club_catalog, partition_club_relations
+from .config import club_column, editions, player_columns, players_csv_path, DATA_DIR
+from .club_relations import build_club_catalog, partition_club_relations, infer_club_country
 
 
 def _validate_players_frame(frame: pd.DataFrame, edition: int) -> pd.DataFrame:
@@ -34,9 +36,80 @@ def load_players_frame(edition: int) -> pd.DataFrame:
     return _validate_players_frame(frame, edition)
 
 
+@lru_cache(maxsize=16)
+def load_club_to_league_map(edition: int) -> dict[str, str]:
+    path = DATA_DIR / "other_dataset_15_22" / f"players_{edition}.csv"
+    if not path.is_file():
+        return {}
+    try:
+        df = pd.read_csv(path, usecols=["club_name", "league_name"], low_memory=False)
+        df = df.dropna(subset=["club_name", "league_name"])
+        mapping = {}
+        for row in df.itertuples(index=False):
+            club = str(row.club_name).strip()
+            league = str(row.league_name).strip()
+            if club and league:
+                mapping[club.lower()] = league
+        return mapping
+    except Exception:
+        return {}
+
+
 def clear_frame_cache() -> None:
     load_players_frame.cache_clear()
     list_all_clubs.cache_clear()
+    load_club_to_league_map.cache_clear()
+
+
+def _estimate_value(overall: int, age: int, potential: int) -> int:
+    if overall < 50:
+        val = 30000 + (overall - 40) * 2000
+    elif overall < 60:
+        val = 50000 + (overall - 50) * 15000
+    elif overall < 70:
+        val = 200000 + (overall - 60) * 80000
+    elif overall < 80:
+        val = 1000000 + (overall - 70) * 500000
+    elif overall < 90:
+        val = 6000000 + (overall - 80) * 4000000
+    else:
+        val = 46000000 + (overall - 90) * 12000000
+
+    if age < 20:
+        age_mult = 1.2
+    elif age < 24:
+        age_mult = 1.3
+    elif age < 28:
+        age_mult = 1.1
+    elif age < 32:
+        age_mult = 0.8
+    elif age < 35:
+        age_mult = 0.5
+    else:
+        age_mult = 0.2
+    
+    pot_diff = max(0, potential - overall)
+    pot_mult = 1.0 + (pot_diff * 0.08)
+
+    return int(val * age_mult * pot_mult)
+
+
+def _estimate_wage(overall: int, value: int) -> int:
+    if overall < 50:
+        base_wage = 500 + (overall - 40) * 50
+    elif overall < 60:
+        base_wage = 1000 + (overall - 50) * 200
+    elif overall < 70:
+        base_wage = 3000 + (overall - 60) * 700
+    elif overall < 80:
+        base_wage = 10000 + (overall - 70) * 3000
+    elif overall < 90:
+        base_wage = 40000 + (overall - 80) * 15000
+    else:
+        base_wage = 190000 + (overall - 90) * 45000
+
+    val_bonus = int(value * 0.001)
+    return int(base_wage + val_bonus)
 
 
 def _player_records(frame: pd.DataFrame) -> list[dict]:
@@ -51,11 +124,30 @@ def _player_records(frame: pd.DataFrame) -> list[dict]:
         for key in ("overall", "potential", "value", "wage", "age"):
             value = record.get(key)
             if pd.isna(value):
-                record[key] = ""
+                record[key] = 0
             elif key in ("overall", "potential", "age"):
                 record[key] = int(value)
             else:
                 record[key] = int(value)
+
+        ovr = record.get("overall") or 50
+        pot = record.get("potential") or ovr
+        age = record.get("age") or 24
+
+        if not record.get("value") or int(record["value"]) <= 0:
+            record["value"] = _estimate_value(ovr, age, pot)
+
+        if not record.get("wage") or int(record["wage"]) <= 0:
+            record["wage"] = _estimate_wage(ovr, int(record["value"]))
+
+        contract_value = record.get("contract")
+        if pd.isna(contract_value) or contract_value == "":
+            record["contract"] = ""
+        elif isinstance(contract_value, (int, float)) and float(contract_value).is_integer():
+            record["contract"] = str(int(contract_value))
+        else:
+            record["contract"] = str(contract_value).strip()
+
         for key in ("name", "fullName", "club", "positions", "nationality"):
             value = record.get(key)
             record[key] = "" if pd.isna(value) else str(value).strip()
@@ -99,6 +191,54 @@ def players_for_club(edition: int, club_name: str) -> list[dict]:
     return _player_records(filtered)
 
 
+def list_all_players_in_edition(edition: int) -> list[dict]:
+    frame = load_players_frame(edition)
+    return _player_records(frame)
+
+
+COUNTRY_ALIASES = {
+    "cotedivoire": "ivorycoast",
+    "ctedivoire": "ivorycoast",
+    "ivorycoast": "ivorycoast",
+}
+
+
+def _country_key(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", str(value or ""))
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]", "", ascii_text.casefold())
+
+
+def _canonical_country_key(value: str) -> str:
+    key = _country_key(value)
+    return COUNTRY_ALIASES.get(key, key)
+
+
+def _national_team_clubs(frame: pd.DataFrame) -> set[str]:
+    club_col = club_column()
+    nat_col = player_columns()["nationality"]
+    national_team_clubs: set[str] = set()
+
+    for club, group in frame.groupby(frame[club_col].astype(str).str.strip(), sort=False):
+        club_name = str(club).strip()
+        if not club_name:
+            continue
+
+        nationalities = group[nat_col].astype(str).str.strip()
+        nationalities = nationalities[nationalities != ""]
+        if nationalities.empty:
+            continue
+
+        top_nationality = str(nationalities.mode().iloc[0]).strip()
+        share = (nationalities == top_nationality).sum() / len(nationalities)
+        club_key = _canonical_country_key(club_name)
+        nationality_key = _canonical_country_key(top_nationality)
+        if share >= 0.85 and club_key == nationality_key:
+            national_team_clubs.add(club_name)
+
+    return national_team_clubs
+
+
 def search_players(edition: int, query: str, limit: int = 50) -> list[dict]:
     normalized = query.strip().lower()
     if len(normalized) < 2:
@@ -106,13 +246,22 @@ def search_players(edition: int, query: str, limit: int = 50) -> list[dict]:
 
     frame = load_players_frame(edition)
     columns_map = player_columns()
-    search_cols = [columns_map["name"], columns_map["fullName"], columns_map["club"], columns_map["nationality"]]
+    search_cols = [columns_map["name"], columns_map["fullName"], columns_map["club"]]
 
     mask = False
     for column in search_cols:
         mask = mask | frame[column].astype(str).str.lower().str.contains(normalized, na=False, regex=False)
 
-    filtered = frame[mask].sort_values("overall", ascending=False).head(limit)
+    filtered = frame[mask].copy()
+
+    club_col = club_column()
+    clubs_to_exclude = _national_team_clubs(frame)
+
+    if clubs_to_exclude:
+        filtered_clubs = filtered[club_col].astype(str).str.strip()
+        filtered = filtered[~filtered_clubs.isin(clubs_to_exclude)]
+
+    filtered = filtered.sort_values("overall", ascending=False).head(limit)
     return _player_records(filtered)
 
 
@@ -180,6 +329,56 @@ def summarize_squad(players: list[dict]) -> dict:
     }
 
 
+def infer_league_for_club(edition: int, club_name: str, players: list[dict]) -> str | None:
+    # Require at least one player to make inference meaningful.
+    if not players:
+        return None
+
+    # 1. Try to look up from the other dataset mapping
+    league_map = load_club_to_league_map(edition)
+    cleaned_club = club_name.strip().lower()
+    if cleaned_club in league_map:
+        return league_map[cleaned_club]
+
+    # 2. Fallback to country-based mapping
+    try:
+        frame = load_players_frame(edition)
+    except FileNotFoundError:
+        return None
+
+    # Try to infer the club's country from the players in this edition.
+    country = infer_club_country(frame, club_name)
+    if not country:
+        return None
+
+    # Map common countries to their primary/top domestic league name used in our datasets.
+    mapping = {
+        "england": "English Premier League",
+        "spain": "Spain Primera Division",
+        "germany": "German 1. Bundesliga",
+        "italy": "Italian Serie A",
+        "france": "French Ligue 1",
+        "netherlands": "Holland Eredivisie",
+        "portugal": "Portuguese Liga ZON SAGRES",
+        "scotland": "Scottish Premiership",
+        "usa": "USA Major League Soccer",
+        "united states": "USA Major League Soccer",
+        "argentina": "Argentina Primera División",
+        "mexico": "Mexican Liga MX",
+        "brazil": "Campeonato Brasileiro Série A",
+        "australia": "Australian Hyundai A-League",
+        "china": "Chinese Super League",
+        "japan": "Japanese J. League Division 1",
+        "switzerland": "Swiss Super League",
+    }
+
+    key = str(country).strip().casefold()
+    for k, v in mapping.items():
+        if key == k or key.startswith(k) or k in key:
+            return v
+    return None
+
+
 def club_archive(club_name: str) -> list[dict]:
     timeline: list[dict] = []
     for edition in editions():
@@ -187,11 +386,13 @@ def club_archive(club_name: str) -> list[dict]:
             players = players_for_club(edition, club_name)
         except FileNotFoundError:
             players = []
+        league = infer_league_for_club(edition, club_name, players)
 
         timeline.append(
             {
                 "edition": edition,
                 "summary": summarize_squad(players),
+                "league": league,
             }
         )
     return timeline
@@ -224,9 +425,22 @@ def signing_suggestions(
     max_value: int | None = None,
     max_wage: int | None = None,
     limit: int = 40,
+    position: str | None = None,
 ) -> dict:
     normalized_club = club_name.strip()
+    current_frame = load_players_frame(edition)
+    national_team_clubs = _national_team_clubs(current_frame)
     current_ids = _club_sofifa_ids(edition, normalized_club)
+
+    def _mark_free_agent(player: dict) -> dict:
+        if str(player.get("club") or "").strip() not in national_team_clubs:
+            return player
+        return {
+            **player,
+            "sourceClub": player.get("club", ""),
+            "club": "Free agent",
+            "isFreeAgent": True,
+        }
 
     ex_meta: dict[str, int] = {}
     future_meta: dict[str, int] = {}
@@ -260,7 +474,7 @@ def signing_suggestions(
         if not candidate or candidate["club"] == normalized_club:
             continue
         ex_players[player_id] = {
-            **candidate,
+            **_mark_free_agent(candidate),
             "reason": "ex-player",
             "lastAtClubEdition": last_edition,
         }
@@ -282,7 +496,7 @@ def signing_suggestions(
         if not current_snapshot or current_snapshot["club"] == normalized_club:
             continue
         future_players[player_id] = {
-            **current_snapshot,
+            **_mark_free_agent(current_snapshot),
             "reason": "future-player",
             "joinsClubEdition": join_edition,
         }
@@ -301,6 +515,14 @@ def signing_suggestions(
             if wage in ("", None):
                 return False
             if int(wage) > max_wage:
+                return False
+
+        # Optional position filter: match if the requested position is a substring
+        # of the player's positions string (case-insensitive). If position is not
+        # provided, all players pass.
+        if position:
+            positions = str(player.get("positions") or "").lower()
+            if position.strip().lower() not in positions:
                 return False
 
         return True
@@ -325,7 +547,7 @@ def signing_suggestions(
     exclude_ids = set(ex_players.keys()) | set(future_players.keys())
     other_list: list[dict] = []
     try:
-        frame = load_players_frame(edition)
+        frame = current_frame
         club_col = club_column()
         id_col = player_columns()["id"]
         overall_col = player_columns()["overall"]
@@ -349,7 +571,14 @@ def signing_suggestions(
             working_ids = working[id_col].astype(str).str.strip()
             working = working[~working_ids.isin(exclude_ids)]
 
-        other_records = _player_records(working.sort_values(overall_col, ascending=False).head(limit * 3))
+        other_records = [
+            _mark_free_agent(player)
+            for player in _player_records(working.sort_values(overall_col, ascending=False).head(limit * 3))
+        ]
+        # Apply optional position filter to other players as well.
+        if position:
+            pos_norm = position.strip().lower()
+            other_records = [p for p in other_records if pos_norm in (p.get("positions") or "").lower()]
         other_list = other_records[:limit]
 
         for player in other_list:
@@ -409,6 +638,7 @@ def club_narrative(edition: int, club_name: str) -> dict:
             {
                 "edition": other_edition,
                 "summary": summarize_squad(players),
+                "league": infer_league_for_club(other_edition, normalized_club, players),
                 "players": [
                     {"id": player["id"], "name": player["name"]}
                     for player in players
@@ -484,6 +714,7 @@ def random_club(edition: int) -> dict:
     return {
         "club": club_name,
         "edition": edition,
+        "league": infer_league_for_club(edition, club_name, players),
         "best11Overall": summary["best11Overall"],
         "nationalityCounts": summary["nationalityCounts"],
         "topPlayers": summary["topPlayers"],

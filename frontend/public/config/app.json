@@ -17,7 +17,8 @@
     "wage": "wage_eur",
     "positions": "player_positions",
     "nationality": "nationality",
-    "age": "age"
+    "age": "age",
+    "contract": "contract_valid_until"
   },
   "setupActions": [
     {
@@ -34,6 +35,12 @@
       "label": "Club Context",
       "description": "Generated philosophy, budget guidance, and era narratives from squad data.",
       "icon": "shield"
+    },
+    {
+      "id": "squad-info",
+      "label": "Squad Info",
+      "description": "Full squad roster with sortable columns and live summary stats.",
+      "icon": "table"
     },
     {
       "id": "objectives-matches",

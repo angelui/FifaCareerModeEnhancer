@@ -106,13 +106,16 @@ export async function fetchClubArchive(clubName) {
   return apiFetch("/clubs/archive", { club: clubName }, { timeoutMs: 120000 });
 }
 
-export async function fetchSigningSuggestions(edition, clubName, maxValue = null, maxWage = null, limit = 40) {
+export async function fetchSigningSuggestions(edition, clubName, maxValue = null, maxWage = null, limit = 40, position = null) {
   const params = { club: clubName, limit };
   if (maxValue != null && maxValue > 0) {
     params.max_value = maxValue;
   }
   if (maxWage != null && maxWage > 0) {
     params.max_wage = maxWage;
+  }
+  if (position != null && position !== "") {
+    params.position = position;
   }
   return apiFetch(`/editions/${edition}/signing-suggestions`, params, { timeoutMs: 120000 });
 }
@@ -151,5 +154,10 @@ export async function fetchRandomClub(edition) {
 export async function fetchRandomPlayer(edition) {
   const normalizedEdition = Number(edition);
   return apiFetch(`/editions/${normalizedEdition}/random-player`, {}, { timeoutMs: 30000 });
+}
+
+export async function fetchAllPlayersForEdition(edition) {
+  const normalizedEdition = Number(edition);
+  return apiFetch(`/editions/${normalizedEdition}/all-players`, {}, { timeoutMs: 120000 });
 }
 

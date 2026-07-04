@@ -17,6 +17,7 @@ function defaultCareerData() {
   return {
     objectives: [],
     matches: [],
+    transactions: [],
     season: 1,
   };
 }
@@ -61,6 +62,7 @@ export async function loadCareerData(career) {
     const backendData = {
       objectives: payload?.objectives ?? [],
       matches: payload?.matches ?? [],
+      transactions: payload?.transactions ?? [],
       season: payload?.season ?? 1,
     };
 
@@ -82,6 +84,7 @@ export async function loadCareerData(career) {
         season: localData.season ?? 1,
         objectives: localData.objectives ?? [],
         matches: localData.matches ?? [],
+        transactions: localData.transactions ?? [],
       }).catch(() => {});
       return localData;
     }
@@ -110,6 +113,7 @@ export async function saveCareerData(career, data) {
     season: Number(data?.season ?? 1),
     objectives: Array.isArray(data?.objectives) ? data.objectives : [],
     matches: Array.isArray(data?.matches) ? data.matches : [],
+    transactions: Array.isArray(data?.transactions) ? data.transactions : [],
   };
 
   // Best effort: primary destination is backend CSV.
@@ -123,6 +127,7 @@ export async function saveCareerData(career, data) {
       season: payload.season,
       objectives: payload.objectives,
       matches: payload.matches,
+      transactions: payload.transactions,
     };
     saveStore(store);
   }

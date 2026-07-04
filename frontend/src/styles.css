@@ -540,6 +540,7 @@ h1 {
 
 .combobox-control {
   position: relative;
+  z-index: 30;
 }
 
 .combobox-input {
@@ -565,7 +566,7 @@ h1 {
 
 .combobox-list {
   position: absolute;
-  z-index: 20;
+  z-index: 1000;
   top: calc(100% + 0.35rem);
   left: 0;
   right: 0;
@@ -748,9 +749,86 @@ h1 {
   gap: 1rem;
 }
 
+.home-header {
+  margin-bottom: 2rem;
+  padding: 1.35rem 1.5rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.home-header-top {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 1.25rem;
+}
+
+.home-career-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.home-club-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  line-height: 1.05;
+}
+
+.home-club-lead {
+  margin: 0;
+  max-width: 52rem;
+}
+
+.home-stat-grid {
+  margin-top: 0.35rem;
+}
+
+.squad-summary-panel {
+  margin-bottom: 1rem;
+}
+
+.squad-summary-meta {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1rem;
+}
+
+.squad-table-wrap {
+  margin-top: 0.75rem;
+}
+
+.sort-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.sort-btn:hover .sort-dir-muted {
+  color: var(--accent);
+}
+
+.sort-dir {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.sort-dir-muted {
+  color: var(--text-muted);
+  opacity: 0.65;
+}
+
 .home-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin-bottom: 2rem;
 }
 
@@ -1214,10 +1292,33 @@ h1 {
   grid-column: span 2;
 }
 
-.field-inline {
-  display: grid;
-  gap: 0.35rem;
+.field-inline,
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   min-width: 7rem;
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  flex-shrink: 0;
+  border-color: var(--line);
+  background: rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+}
+
+.checkbox-field input[type="checkbox"]:checked {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.checkbox-label {
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .field-check {

@@ -329,6 +329,7 @@ def derive_era_narrative(
     summary: dict,
     previous_summary: dict | None,
     delta: dict,
+    league: str | None = None,
 ) -> dict:
     count = summary.get("count") or 0
     avg_overall = summary.get("avgOverall")
@@ -341,11 +342,13 @@ def derive_era_narrative(
             "headline": f"Not in FIFA {edition}",
             "narrative": f"{club_name} do not appear in the FIFA {edition} dataset.",
             "avgOverall": None,
+            "best11Overall": None,
             "deltaOverall": None,
+            "league": league,
         }
 
-    prev_avg = previous_summary.get("avgOverall") if previous_summary else None
-    delta_overall = avg_overall - prev_avg if avg_overall is not None and prev_avg is not None else None
+    prev_best11 = previous_summary.get("best11Overall") if previous_summary else None
+    delta_overall = best11_overall - prev_best11 if best11_overall is not None and prev_best11 is not None else None
 
     if delta_overall is not None:
         if delta_overall >= 2:
@@ -356,14 +359,14 @@ def derive_era_narrative(
             headline = f"FIFA {edition} — steady evolution"
 
     parts: list[str] = []
-    if avg_overall is not None:
-        parts.append(f"Average squad rating sits at {avg_overall} across {count} players.")
     if best11_overall is not None:
-        parts.append(f"Best XI baseline sits at {best11_overall}.")
+        parts.append(f"Best XI baseline sits at {best11_overall} OVR.")
+    if avg_overall is not None:
+        parts.append(f"Average squad rating is {avg_overall} across {count} players.")
 
     if delta_overall is not None:
         direction = "rose" if delta_overall > 0 else "fell" if delta_overall < 0 else "held"
-        parts.append(f"Overall level {direction} by {abs(delta_overall)} from the prior edition.")
+        parts.append(f"Best XI level {direction} by {abs(delta_overall)} from the prior edition.")
 
     if delta.get("arrivals"):
         names = ", ".join(player["name"] for player in delta["arrivals"][:3])
@@ -408,7 +411,9 @@ def derive_era_narrative(
         "headline": headline,
         "narrative": " ".join(parts),
         "avgOverall": avg_overall,
+        "best11Overall": best11_overall,
         "deltaOverall": delta_overall,
+        "league": league,
     }
 
 
@@ -631,6 +636,7 @@ def build_club_narrative(
                 summary,
                 previous_summary,
                 delta,
+                league=entry.get("league"),
             )
         )
         previous_players = current_players

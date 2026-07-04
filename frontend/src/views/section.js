@@ -3,13 +3,15 @@ import { renderClubArchive, bindClubArchive } from "./club-archive.js";
 import { renderClubContext, bindClubContext } from "./club-context.js";
 import { renderObjectivesMatches, bindObjectivesMatches } from "./objectives-matches.js";
 import { renderJournal, bindJournal } from "./journal.js";
-import { renderRosterTools, bindRosterTools } from "./roster-tools.js";
+import { renderRosterTools, bindRosterTools } from "./roster-tools.fixed.js";
+import { renderSquadInfo, bindSquadInfo } from "./squad-info.js";
 
 const sectionRenderers = {
   "club-archive": renderClubArchive,
   "club-context": renderClubContext,
   "objectives-matches": renderObjectivesMatches,
   "roster-tools": renderRosterTools,
+  "squad-info": renderSquadInfo,
   journal: renderJournal,
 };
 
@@ -18,6 +20,7 @@ const sectionBinders = {
   "club-context": bindClubContext,
   "objectives-matches": bindObjectivesMatches,
   "roster-tools": bindRosterTools,
+  "squad-info": bindSquadInfo,
   journal: bindJournal,
 };
 
