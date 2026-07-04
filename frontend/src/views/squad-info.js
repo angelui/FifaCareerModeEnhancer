@@ -2,6 +2,7 @@ import { fetchAllPlayersForEdition, fetchPlayersByClub, fetchPlayerSearch } from
 import { mountCombobox, renderCombobox } from "../ui/combobox.js";
 import { escapeHtml } from "../ui.js";
 import { assertCareerReady, runSectionLoader } from "../ui/section-loader.js";
+import { bindSectionNav } from "../ui/section-nav.js";
 import { formatMoney, renderSectionShell } from "./section-shell.js";
 import { createId, loadCareerData, updateCareerData } from "../career-data.js";
 
@@ -217,7 +218,7 @@ function renderSquadTable(players, sortKey, sortDir) {
   `;
 }
 
-function renderRosterChangesTab(transactions, currentSeason, allPlayers = []) {
+function renderRosterChangesContent(transactions, currentSeason) {
   const options = [
     { value: "signing", label: "Signing" },
     { value: "loan_in", label: "Loan In" },
@@ -273,8 +274,7 @@ function renderRosterChangesTab(transactions, currentSeason, allPlayers = []) {
     : `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No roster changes logged yet for this career.</td></tr>`;
 
   return `
-    <div class="tab-panel" id="tab-changes" hidden>
-      <div style="display: grid; grid-template-columns: 1fr; gap: 1.5rem; margin-top: 1rem;">
+    <div style="display: grid; grid-template-columns: 1fr; gap: 1.5rem;">
         
         <!-- Add Change Form -->
         <section class="panel section-panel">
@@ -350,16 +350,35 @@ function renderRosterChangesTab(transactions, currentSeason, allPlayers = []) {
   `;
 }
 
-
 export async function renderSquadInfo({ career }) {
   return renderSectionShell({
     career,
     title: "Squad Info",
     description: "Live squad roster from the dataset — click any column header to sort.",
-    content: `
-      <div id="squad-info-loading"></div>
-      <div id="squad-info-content" hidden></div>
-    `,
+    defaultPane: "summary",
+    panes: [
+      {
+        id: "summary",
+        label: "Summary",
+        icon: "shield",
+        content: `
+          <div id="squad-info-loading"></div>
+          <div id="squad-summary-root" hidden></div>
+        `,
+      },
+      {
+        id: "roster",
+        label: "Squad Roster",
+        icon: "table",
+        content: `<div id="squad-roster-root"></div>`,
+      },
+      {
+        id: "changes",
+        label: "Transfer Journal",
+        icon: "book",
+        content: `<div id="squad-changes-root"></div>`,
+      },
+    ],
   });
 }
 
@@ -367,24 +386,35 @@ export function bindSquadInfo({ career, scope }) {
   if (!scope?.isActive()) return;
 
   const loading = document.getElementById("squad-info-loading");
-  const content = document.getElementById("squad-info-content");
+  const summaryRoot = document.getElementById("squad-summary-root");
+  const rosterRoot = document.getElementById("squad-roster-root");
+  const changesRoot = document.getElementById("squad-changes-root");
   if (!assertCareerReady(career, loading)) return;
 
   let players = [];
   let sortKey = "overall";
   let sortDir = "desc";
   let careerData = { transactions: [], season: 1 };
-  let activeTab = "roster";
   let txPlayerCombobox = null;
   let txPlayerLookup = new Map();
   let txSearchTimer = null;
   let txSearchSeq = 0;
+  let txComboboxReady = false;
+  let txInputBound = false;
+
+  bindSectionNav("section-nav", {
+    onActivate: (paneId) => {
+      if (paneId === "changes" && !txComboboxReady) {
+        txComboboxReady = true;
+        setupTxPlayerCombobox();
+      }
+    },
+  });
 
   function setupTxPlayerCombobox() {
     const inputEl = document.getElementById("tx-player-name-input");
     if (!inputEl) return;
 
-    // Re-rendering the page will replace the DOM; destroy and recreate to avoid duplicate listeners.
     txPlayerCombobox?.destroy?.();
     txPlayerCombobox = mountCombobox("tx-player-name", {
       items: [],
@@ -409,6 +439,9 @@ export function bindSquadInfo({ career, scope }) {
     txPlayerLookup = new Map();
     txPlayerCombobox.setStatus("Type at least 2 characters to search players…", "info");
 
+    if (txInputBound) return;
+    txInputBound = true;
+
     inputEl.addEventListener("input", () => {
       window.clearTimeout(txSearchTimer);
       txSearchTimer = window.setTimeout(async () => {
@@ -432,7 +465,6 @@ export function bindSquadInfo({ career, scope }) {
           const playersFound = Array.isArray(results) ? results : [];
           txPlayerLookup = new Map(playersFound.map((p) => [String(p.id), p]));
 
-          // Label includes club so local filtering still works for queries like "Messi Barcelona".
           const items = playersFound.map((p) => ({
             value: String(p.id),
             label: `${p.name} (${p.club})${p.nationality ? ` · ${p.nationality}` : ""}`,
@@ -449,44 +481,40 @@ export function bindSquadInfo({ career, scope }) {
     });
   }
 
-  const paint = () => {
-    if (!scope.isActive() || !content) return;
-    const summary = computeSquadSummary(players);
-    
-    const rosterActive = activeTab === "roster" ? " tab-btn-active" : "";
-    const changesActive = activeTab === "changes" ? " tab-btn-active" : "";
-    
-    content.innerHTML = `
-      ${renderSummaryPanel(summary, career)}
-      
-      <div class="tab-row" style="margin-top: 1.5rem; margin-bottom: 1rem;">
-        <button type="button" class="tab-btn${rosterActive}" data-squad-tab="roster">Squad Roster</button>
-        <button type="button" class="tab-btn${changesActive}" data-squad-tab="changes">Transfer Journal</button>
-      </div>
-
-      <div class="tab-panel" id="tab-roster" ${activeTab !== "roster" ? "hidden" : ""}>
-        <section class="panel section-panel">
-          <div class="panel-header-inline">
-            <h3>Roster</h3>
-            <p class="form-hint">${players.length} player${players.length === 1 ? "" : "s"} · sorted by ${escapeHtml(sortKey)} (${escapeHtml(sortDir)})</p>
-          </div>
-          ${renderSquadTable(players, sortKey, sortDir)}
-        </section>
-      </div>
-
-      ${renderRosterChangesTab(careerData.transactions || [], careerData.season || 1, players)}
-    `;
-
-    const tabChanges = document.getElementById("tab-changes");
-    if (tabChanges) {
-      tabChanges.hidden = activeTab !== "changes";
-    }
-
-    setupTxPlayerCombobox();
+  const paintSummary = () => {
+    if (!summaryRoot) return;
+    summaryRoot.innerHTML = renderSummaryPanel(computeSquadSummary(players), career);
   };
 
-  content.addEventListener("click", async (event) => {
-    // 1) Sort buttons
+  const paintRoster = () => {
+    if (!rosterRoot) return;
+    rosterRoot.innerHTML = `
+      <section class="panel section-panel">
+        <div class="panel-header-inline">
+          <h3>Roster</h3>
+          <p class="form-hint">${players.length} player${players.length === 1 ? "" : "s"} · sorted by ${escapeHtml(sortKey)} (${escapeHtml(sortDir)})</p>
+        </div>
+        ${renderSquadTable(players, sortKey, sortDir)}
+      </section>
+    `;
+  };
+
+  const paintChanges = () => {
+    if (!changesRoot) return;
+    changesRoot.innerHTML = renderRosterChangesContent(
+      careerData.transactions || [],
+      careerData.season || 1,
+    );
+  };
+
+  const paintAll = () => {
+    paintSummary();
+    paintRoster();
+    paintChanges();
+  };
+
+  const navRoot = document.getElementById("section-nav");
+  navRoot?.addEventListener("click", async (event) => {
     const sortButton = event.target.closest("[data-sort]");
     if (sortButton) {
       const nextKey = sortButton.getAttribute("data-sort");
@@ -499,35 +527,22 @@ export function bindSquadInfo({ career, scope }) {
         const column = SORT_COLUMNS.find((entry) => entry.key === nextKey);
         sortDir = column?.type === "text" ? "asc" : "desc";
       }
-      paint();
+      paintRoster();
       return;
     }
 
-    // 2) Tab buttons
-    const tabButton = event.target.closest("[data-squad-tab]");
-    if (tabButton) {
-      const tab = tabButton.getAttribute("data-squad-tab");
-      if (tab) {
-        activeTab = tab;
-        paint();
-      }
-      return;
-    }
-
-    // 3) Delete transaction button
     const deleteBtn = event.target.closest(".delete-tx-btn");
     if (deleteBtn) {
       const txId = deleteBtn.getAttribute("data-tx-id");
       if (txId && confirm("Are you sure you want to delete this roster change?")) {
         careerData.transactions = (careerData.transactions || []).filter((tx) => tx.id !== txId);
         await updateCareerData(career, { transactions: careerData.transactions });
-        paint();
+        paintChanges();
       }
-      return;
     }
   });
 
-  content.addEventListener("submit", async (event) => {
+  navRoot?.addEventListener("submit", async (event) => {
     const form = event.target.closest("#add-tx-form");
     if (!form) return;
     event.preventDefault();
@@ -553,8 +568,7 @@ export function bindSquadInfo({ career, scope }) {
 
     careerData.transactions = [...(careerData.transactions || []), newTx];
     await updateCareerData(career, { transactions: careerData.transactions });
-    
-    // Clear form inputs except season
+
     const nameInput = document.getElementById("tx-player-name-input");
     if (nameInput) nameInput.value = "";
     const hiddenValue = document.getElementById("tx-player-name-value");
@@ -566,7 +580,7 @@ export function bindSquadInfo({ career, scope }) {
     const wageInput = document.getElementById("tx-wage");
     if (wageInput) wageInput.value = "";
 
-    paint();
+    paintChanges();
   });
 
   runSectionLoader(
@@ -574,7 +588,7 @@ export function bindSquadInfo({ career, scope }) {
     loading,
     async ({ setStep }) => {
       setStep(`Loading ${career.team} squad for FIFA ${career.edition}…`);
-      
+
       const [fetchedPlayers, loadedCareerData] = await Promise.all([
         fetchPlayersByClub(career.edition, career.team),
         loadCareerData(career),
@@ -585,9 +599,9 @@ export function bindSquadInfo({ career, scope }) {
 
       if (!scope.isActive()) return null;
 
-      content.hidden = false;
+      if (summaryRoot) summaryRoot.hidden = false;
       loading.style.display = "none";
-      paint();
+      paintAll();
       return { count: players.length };
     },
     {

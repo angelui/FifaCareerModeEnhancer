@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from .config import editions, load_app_config
 from . import bootstrap, data
-from .saves import CareerSaveState, list_profiles, load_state, save_state
+from .saves import CareerSaveState, list_all_saves, list_profiles, load_state, save_state
 
 app = FastAPI(
     title="FIFA Career Narrative Companion API",
@@ -183,6 +183,12 @@ class CareerSaveStatePayload(BaseModel):
     objectives: list[dict] = []
     matches: list[dict] = []
     transactions: list[dict] = []
+
+
+@app.get("/api/career-saves")
+def career_saves_list() -> dict:
+    saves = list_all_saves()
+    return {"count": len(saves), "saves": saves}
 
 
 @app.get("/api/career-saves/profiles")

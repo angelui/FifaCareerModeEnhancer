@@ -4,6 +4,7 @@ import { escapeHtml } from "../ui.js";
 import { mountCombobox, renderCombobox } from "../ui/combobox.js";
 import { renderLoadComplete, renderLoadingPanel, startLoadTimer } from "../ui/loading.js";
 import { assertCareerReady } from "../ui/section-loader.js";
+import { bindSectionNav } from "../ui/section-nav.js";
 import { renderSectionShell, renderStatus } from "./section-shell.js";
 
 function renderObjectiveItem(objective) {
@@ -82,7 +83,7 @@ function renderMatchItem(match) {
     .join(" ");
 
   return `
-    <li class="list-item match-item" data-id="${escapeHtml(match.id)}">
+    <li class="list-item match-item${match.played ? " list-item-played" : ""}" data-id="${escapeHtml(match.id)}">
       <div class="match-item-body">
         <strong>${escapeHtml(match.opponent)}</strong>
         ${match.date ? `<span class="table-sub">${escapeHtml(match.date)}</span>` : ""}
@@ -98,6 +99,80 @@ function renderMatchItem(match) {
       </div>
     </li>
   `;
+}
+
+function showMatchPlayedDialog({ opponent, date = "", notes = "", onConfirm, onCancel }) {
+  const existing = document.getElementById("match-played-dialog");
+  existing?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "match-played-dialog";
+  overlay.className = "app-dialog-overlay";
+  overlay.innerHTML = `
+    <div class="app-dialog" role="dialog" aria-modal="true" aria-labelledby="match-played-dialog-title">
+      <div class="app-dialog-header">
+        <h3 id="match-played-dialog-title">Mark fixture as played</h3>
+        <p class="form-hint">${escapeHtml(opponent)}</p>
+      </div>
+      <form id="match-played-form" class="app-dialog-body">
+        <label class="field field-stack">
+          <span>Date</span>
+          <input id="match-played-date" type="date" value="${escapeHtml(date)}" />
+        </label>
+        <label class="field field-stack">
+          <span>Notes</span>
+          <textarea id="match-played-notes" rows="4" placeholder="Scoreline, standout performers, context...">${escapeHtml(notes)}</textarea>
+        </label>
+        <div class="app-dialog-actions">
+          <button type="button" class="btn btn-ghost" data-action="cancel-match-played">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close(false);
+    }
+  };
+
+  const close = (confirmed, values = null) => {
+    document.removeEventListener("keydown", onKeyDown);
+    overlay.remove();
+    document.body.classList.remove("app-dialog-open");
+    if (confirmed) {
+      onConfirm?.(values);
+    } else {
+      onCancel?.();
+    }
+  };
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) close(false);
+  });
+
+  document.addEventListener("keydown", onKeyDown);
+
+  overlay.querySelector('[data-action="cancel-match-played"]')?.addEventListener("click", () => close(false));
+
+  overlay.querySelector("#match-played-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    close(true, {
+      date: overlay.querySelector("#match-played-date")?.value ?? "",
+      notes: overlay.querySelector("#match-played-notes")?.value.trim() ?? "",
+    });
+  });
+
+  document.body.classList.add("app-dialog-open");
+  document.body.appendChild(overlay);
+
+  const dateInput = overlay.querySelector("#match-played-date");
+  if (dateInput && !dateInput.value) {
+    dateInput.value = new Date().toISOString().slice(0, 10);
+  }
+  dateInput?.focus();
 }
 
 function renderHintCard(hint, { action = "add-hint" } = {}) {
@@ -153,100 +228,139 @@ export async function renderObjectivesMatches({ career }) {
     career,
     title: "Objectives & Matches",
     description: "Generated board goals plus fixture tracking for your save.",
-    content: `
-      <section id="generated-objectives" class="panel section-panel">
-        <div class="panel-header-inline">
-          <h3>Board objectives</h3>
-          <p class="form-hint">Generated from squad tier and club philosophy.</p>
-        </div>
-        <div id="generated-objectives-body"></div>
-      </section>
+    defaultPane: "board",
+    panes: [
+      {
+        id: "board",
+        label: "Board objectives",
+        icon: "target",
+        content: `
+          <section id="generated-objectives" class="panel section-panel">
+            <div class="panel-header-inline">
+              <h3>Board objectives</h3>
+              <p class="form-hint">Generated from squad tier and club philosophy.</p>
+            </div>
+            <div id="generated-objectives-body"></div>
+          </section>
+        `,
+      },
+      {
+        id: "season",
+        label: "Your season",
+        icon: "shield",
+        content: `
+          <section class="panel section-panel form-panel">
+            <div class="panel-header-inline">
+              <h3>Season ${data.season}</h3>
+              <label class="field field-inline">
+                <span>Season #</span>
+                <input id="season-input" type="number" min="1" value="${data.season}" />
+              </label>
+            </div>
 
-      <section class="panel section-panel form-panel">
-        <div class="panel-header-inline">
-          <h3>Season ${data.season}</h3>
-          <label class="field field-inline">
-            <span>Season #</span>
-            <input id="season-input" type="number" min="1" value="${data.season}" />
-          </label>
-        </div>
+            <form id="objective-form" class="inline-form">
+              <label class="field field-grow">
+                <span>Custom objective</span>
+                <input id="objective-input" type="text" placeholder="Add your own board goal..." required />
+              </label>
+              <button type="submit" class="btn btn-primary">Add</button>
+            </form>
+            <ul id="objectives-list" class="item-list">
+              ${data.objectives.length ? data.objectives.map(renderObjectiveItem).join("") : '<li class="empty-inline">No objectives yet.</li>'}
+            </ul>
+          </section>
+        `,
+      },
+      {
+        id: "fixtures",
+        label: "Fixtures",
+        icon: "table",
+        content: `
+          <section class="panel section-panel form-panel">
+            <div class="panel-header-inline">
+              <div>
+                <h3>Add fixture</h3>
+                <p class="form-hint">Track an important upcoming match.</p>
+              </div>
+            </div>
+            <form id="match-form" class="form-grid match-form">
+              <div class="field field-span-2">
+                ${renderCombobox({
+                  idPrefix: "match-opponent",
+                  label: "Opponent",
+                  placeholder: "Type a club and press Enter…",
+                  hint: "Pick from your FIFA edition or type any name.",
+                })}
+              </div>
+              <p id="match-opponent-extra" class="form-hint field-span-2" hidden aria-live="polite"></p>
+              <label class="field">
+                <span>Date (optional)</span>
+                <input id="match-date" type="date" />
+              </label>
+              <label class="field">
+                <span>Distance (km)</span>
+                <input id="match-distance" type="number" min="0" step="1" placeholder="e.g. 450" />
+              </label>
+              <label class="field field-check">
+                <input id="match-rivalry" type="checkbox" />
+                <span>Rivalry fixture</span>
+              </label>
+              <label class="field field-stack field-span-2">
+                <span>Notes</span>
+                <input id="match-notes" type="text" placeholder="Derby, long away trip, must-win..." />
+              </label>
+              <div class="form-actions field-span-2">
+                <button type="submit" class="btn btn-primary">Add fixture</button>
+              </div>
+            </form>
+          </section>
 
-        <form id="objective-form" class="inline-form">
-          <label class="field field-grow">
-            <span>Custom objective</span>
-            <input id="objective-input" type="text" placeholder="Add your own board goal..." required />
-          </label>
-          <button type="submit" class="btn btn-primary">Add</button>
-        </form>
-        <ul id="objectives-list" class="item-list">
-          ${data.objectives.length ? data.objectives.map(renderObjectiveItem).join("") : '<li class="empty-inline">No objectives yet.</li>'}
-        </ul>
-      </section>
-
-      <section class="panel section-panel form-panel">
-        <h3>Important fixtures</h3>
-        <form id="match-form" class="form-grid match-form">
-          <div class="field field-span-2">
-            ${renderCombobox({
-              idPrefix: "match-opponent",
-              label: "Opponent",
-              placeholder: "Type a club and press Enter…",
-              hint: "Pick from your FIFA edition or type any name.",
-            })}
-          </div>
-          <p id="match-opponent-extra" class="form-hint" hidden aria-live="polite"></p>
-          <label class="field">
-            <span>Date (optional)</span>
-            <input id="match-date" type="date" />
-          </label>
-          <label class="field">
-            <span>Distance (km)</span>
-            <input id="match-distance" type="number" min="0" step="1" placeholder="e.g. 450" />
-          </label>
-          <label class="field field-check">
-            <input id="match-rivalry" type="checkbox" />
-            <span>Rivalry fixture</span>
-          </label>
-          <label class="field field-stack field-span-2">
-            <span>Notes</span>
-            <input id="match-notes" type="text" placeholder="Derby, long away trip, must-win..." />
-          </label>
-          <div class="form-actions field-span-2">
-            <button type="submit" class="btn btn-primary">Add fixture</button>
-          </div>
-        </form>
-        <ul id="matches-list" class="item-list">
-          ${data.matches.length ? data.matches.map(renderMatchItem).join("") : '<li class="empty-inline">No fixtures tracked yet.</li>'}
-        </ul>
-      </section>
-
-      <section class="panel section-panel">
-        <div class="panel-header-inline">
-          <h3>Fixture intelligence</h3>
-          <p class="form-hint">Rivals and nearby clubs compiled from squad nationality, city names, and name overlap.</p>
-        </div>
-        <div id="fixture-hints-status"></div>
-      </section>
-
-      <section class="panel section-panel">
-        <div class="panel-header-inline">
-          <h3>Suggested fixtures</h3>
-          <p class="form-hint">Mixed rivals, nearby sides, and top opponents for FIFA ${career.edition}.</p>
-        </div>
-        <div class="tab-row">
-          <button type="button" class="tab-btn tab-btn-active" data-fixtab="rivals">Rivalries</button>
-          <button type="button" class="tab-btn" data-fixtab="top">Top sides</button>
-          <button type="button" class="tab-btn" data-fixtab="nearest">Nearest</button>
-          <button type="button" class="tab-btn" data-fixtab="other">Others</button>
-        </div>
-        <div id="fixture-hints" class="hint-grid"></div>
-        <div class="form-actions">
-          <button type="button" id="fixture-hints-show-more" class="btn btn-ghost" hidden>
-            Show more
-          </button>
-        </div>
-      </section>
-    `,
+          <section class="panel section-panel">
+            <div class="panel-header-inline">
+              <div>
+                <h3>Important fixtures</h3>
+                <p class="form-hint">Fixtures you've saved for this career.</p>
+              </div>
+            </div>
+            <ul id="matches-list" class="item-list">
+              ${data.matches.length ? data.matches.map(renderMatchItem).join("") : '<li class="empty-inline">No fixtures tracked yet.</li>'}
+            </ul>
+          </section>
+        `,
+      },
+      {
+        id: "suggested",
+        label: "Suggested fixtures",
+        icon: "archive",
+        content: `
+          <section class="panel section-panel">
+            <div class="panel-header-inline">
+              <h3>Fixture intelligence</h3>
+              <p class="form-hint">Rivals and nearby clubs compiled from squad nationality, city names, and name overlap.</p>
+            </div>
+            <div id="fixture-hints-status"></div>
+          </section>
+          <section class="panel section-panel">
+            <div class="panel-header-inline">
+              <h3>Suggested fixtures</h3>
+              <p class="form-hint">Mixed rivals, nearby sides, and top opponents for FIFA ${career.edition}.</p>
+            </div>
+            <div class="tab-row">
+              <button type="button" class="tab-btn tab-btn-active" data-fixtab="rivals">Rivalries</button>
+              <button type="button" class="tab-btn" data-fixtab="top">Top sides</button>
+              <button type="button" class="tab-btn" data-fixtab="nearest">Nearest</button>
+              <button type="button" class="tab-btn" data-fixtab="other">Others</button>
+            </div>
+            <div id="fixture-hints" class="hint-grid"></div>
+            <div class="form-actions">
+              <button type="button" id="fixture-hints-show-more" class="btn btn-ghost" hidden>
+                Show more
+              </button>
+            </div>
+          </section>
+        `,
+      },
+    ],
   });
 }
 
@@ -262,6 +376,8 @@ export async function bindObjectivesMatches({ career, scope }) {
   const fixtureHintsShowMore = document.getElementById("fixture-hints-show-more");
 
   if (!assertCareerReady(career, generatedRoot)) return;
+
+  bindSectionNav("section-nav");
 
   let state = await loadCareerData(career);
 
@@ -407,11 +523,28 @@ export async function bindObjectivesMatches({ career, scope }) {
     if (!target) return;
     const id = target.getAttribute("data-id");
     const item = state.matches.find((entry) => entry.id === id);
-    if (item) {
-      item.played = target.checked;
-      persist();
-      refreshMatches();
+    if (!item) return;
+
+    if (target.checked) {
+      target.checked = false;
+      showMatchPlayedDialog({
+        opponent: item.opponent,
+        date: item.date || "",
+        notes: item.notes || "",
+        onConfirm: ({ date, notes }) => {
+          item.played = true;
+          item.date = date;
+          item.notes = notes;
+          persist();
+          refreshMatches();
+        },
+      });
+      return;
     }
+
+    item.played = false;
+    persist();
+    refreshMatches();
   });
 
   document.getElementById("generated-objectives")?.addEventListener("click", (event) => {

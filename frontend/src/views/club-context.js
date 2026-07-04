@@ -1,6 +1,7 @@
 import { fetchClubNarrative } from "../api.js";
 import { escapeHtml } from "../ui.js";
 import { assertCareerReady, markSectionReady, runSectionLoader } from "../ui/section-loader.js";
+import { bindSectionNav } from "../ui/section-nav.js";
 import { formatMoney, renderSectionShell } from "./section-shell.js";
 
 function renderTags(tags = []) {
@@ -85,40 +86,80 @@ export async function renderClubContext({ career }) {
     career,
     title: "Club Context",
     description: "Dataset-driven philosophy, budget guidance, and era narratives for your club.",
-    content: `
-      <div id="context-loading"></div>
-      <div id="context-content" hidden></div>
-    `,
+    defaultPane: "philosophy",
+    panes: [
+      {
+        id: "philosophy",
+        label: "Philosophy",
+        icon: "shield",
+        content: `
+          <div id="context-loading"></div>
+          <div id="context-philosophy-root" hidden></div>
+        `,
+      },
+      {
+        id: "budget",
+        label: "Budget",
+        icon: "target",
+        content: `<div id="context-budget-root"></div>`,
+      },
+      {
+        id: "profile",
+        label: "Squad profile",
+        icon: "table",
+        content: `<div id="context-profile-root"></div>`,
+      },
+      {
+        id: "eras",
+        label: "Era narratives",
+        icon: "archive",
+        content: `<div id="context-eras-root"></div>`,
+      },
+    ],
   });
 }
 
 export function bindClubContext({ career, scope }) {
   const loading = document.getElementById("context-loading");
-  const content = document.getElementById("context-content");
+  const philosophyRoot = document.getElementById("context-philosophy-root");
+  const budgetRoot = document.getElementById("context-budget-root");
+  const profileRoot = document.getElementById("context-profile-root");
+  const erasRoot = document.getElementById("context-eras-root");
 
   if (!assertCareerReady(career, loading)) return;
+
+  bindSectionNav("section-nav");
 
   runSectionLoader(scope, loading, async ({ setStep }) => {
     setStep("Analyzing squad profile and edition timeline…");
     const payload = await fetchClubNarrative(career.edition, career.team);
 
     markSectionReady(loading, "Club context ready", `${payload.philosophy?.title ?? "Identity"} · ${payload.eraNarratives?.length ?? 0} era snapshots`);
-    content.hidden = false;
-    content.innerHTML = `
-      ${renderPhilosophy(payload.philosophy ?? {})}
-      ${renderBudget(payload.budget ?? {})}
-      <section class="panel section-panel">
-        <h3>Squad profile · FIFA ${career.edition}</h3>
-        ${renderProfileStats(payload.profile ?? {})}
-      </section>
-      <section class="panel section-panel">
-        <div class="panel-header-inline">
-          <h3>Era narratives</h3>
-          <p class="form-hint">How ${escapeHtml(career.team)} shifts across FIFA 15–20 in the dataset.</p>
-        </div>
-        ${renderEraTimeline(payload.eraNarratives ?? [], career.edition)}
-      </section>
-    `;
+
+    if (philosophyRoot) {
+      philosophyRoot.hidden = false;
+      philosophyRoot.innerHTML = renderPhilosophy(payload.philosophy ?? {});
+    }
+    if (budgetRoot) budgetRoot.innerHTML = renderBudget(payload.budget ?? {});
+    if (profileRoot) {
+      profileRoot.innerHTML = `
+        <section class="panel section-panel">
+          <h3>Squad profile · FIFA ${career.edition}</h3>
+          ${renderProfileStats(payload.profile ?? {})}
+        </section>
+      `;
+    }
+    if (erasRoot) {
+      erasRoot.innerHTML = `
+        <section class="panel section-panel">
+          <div class="panel-header-inline">
+            <h3>Era narratives</h3>
+            <p class="form-hint">How ${escapeHtml(career.team)} shifts across FIFA 15–20 in the dataset.</p>
+          </div>
+          ${renderEraTimeline(payload.eraNarratives ?? [], career.edition)}
+        </section>
+      `;
+    }
 
     return payload;
   }, {

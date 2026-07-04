@@ -772,26 +772,42 @@ def random_player(edition: int) -> dict:
                 int(val) if str(val).isdigit() or isinstance(val, (int, float)) else 50
             )
 
+    overall = int(player_dict.get("overall", 50)) if player_dict.get("overall") else 50
+    potential = int(player_dict.get("potential", 50)) if player_dict.get("potential") else 50
+    age = int(player_dict.get("age", 20)) if player_dict.get("age") else 20
+
+    value = 0
+    raw_value = player_dict.get("value_eur")
+    if raw_value not in ("", None):
+        try:
+            value = int(float(raw_value))
+        except (TypeError, ValueError):
+            value = 0
+    if value <= 0:
+        value = _estimate_value(overall, age, potential)
+
+    wage = 0
+    raw_wage = player_dict.get("wage_eur")
+    if raw_wage not in ("", None):
+        try:
+            wage = int(float(raw_wage))
+        except (TypeError, ValueError):
+            wage = 0
+    if wage <= 0:
+        wage = _estimate_wage(overall, value)
+
     return {
         "id": str(player_dict.get("sofifa_id", "")),
         "name": str(player_dict.get("short_name", "")),
         "fullName": str(player_dict.get("long_name", "")),
         "club": str(player_dict.get("club", "")),
-        "overall": int(player_dict.get("overall", 50))
-        if player_dict.get("overall")
-        else 50,
-        "potential": int(player_dict.get("potential", 50))
-        if player_dict.get("potential")
-        else 50,
-        "value": int(player_dict.get("value_eur", 0))
-        if player_dict.get("value_eur")
-        else 0,
-        "wage": int(player_dict.get("wage_eur", 0))
-        if player_dict.get("wage_eur")
-        else 0,
+        "overall": overall,
+        "potential": potential,
+        "value": value,
+        "wage": wage,
         "positions": positions_str,
         "nationality": str(player_dict.get("nationality", "")),
-        "age": int(player_dict.get("age", 20)) if player_dict.get("age") else 20,
+        "age": age,
         "isGoalkeeper": is_gk,
         "stats": stats,
     }

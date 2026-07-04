@@ -1,12 +1,24 @@
 import { isCareerReady } from "../state.js";
 import { escapeHtml, icon } from "../ui.js";
 import { mountCombobox, renderCombobox } from "../ui/combobox.js";
+import { renderSectionNav } from "../ui/section-nav.js";
 
-export function renderSectionShell({ career, title, description, content, origin = null }) {
+export function renderSectionShell({
+  career,
+  title,
+  description,
+  content,
+  panes,
+  defaultPane,
+  navId = "section-nav",
+  origin = null,
+}) {
   const backRoute = origin === "setup" ? "setup" : isCareerReady(career) ? "home" : "setup";
   const context = isCareerReady(career)
     ? `${escapeHtml(career.team)} · FIFA ${career.edition}`
     : "Reference";
+
+  const body = panes?.length ? renderSectionNav(panes, defaultPane, navId) : content;
 
   return `
     <div class="page section-page">
@@ -25,7 +37,7 @@ export function renderSectionShell({ career, title, description, content, origin
         </div>
       </header>
 
-      ${content}
+      ${body}
     </div>
   `;
 }

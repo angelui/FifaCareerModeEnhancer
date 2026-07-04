@@ -128,6 +128,10 @@ export async function fetchClubNarrative(edition, clubName) {
   return apiFetch(`/editions/${edition}/narrative`, { club: clubName }, { timeoutMs: 120000 });
 }
 
+export async function fetchCareerSaves() {
+  return apiFetch("/career-saves", {}, { timeoutMs: 30000 });
+}
+
 export async function fetchCareerSaveProfiles(edition, team) {
   const normalizedEdition = Number(edition);
   return apiFetch(`/career-saves/profiles`, { edition: normalizedEdition, team: team ?? "" }, { timeoutMs: 30000 });

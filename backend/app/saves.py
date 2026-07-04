@@ -4,6 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
@@ -77,6 +78,73 @@ def _parse_bool(value) -> bool:
 
 def default_state() -> CareerSaveState:
     return CareerSaveState(season=1, objectives=[], matches=[], transactions=[])
+
+
+def _prettify_slug(slug: str) -> str:
+    return str(slug or "").replace("_", " ").strip().title() or "Unknown club"
+
+
+@lru_cache(maxsize=16)
+def _team_slug_map(edition: int) -> dict[str, str]:
+    from .data import list_clubs_for_edition
+
+    mapping: dict[str, str] = {}
+    try:
+        for club in list_clubs_for_edition(edition):
+            mapping[_ascii_slug(club)] = club
+    except Exception:
+        pass
+    return mapping
+
+
+def resolve_team_name(edition: int, team_slug: str, meta_team: str | None = None) -> str:
+    if meta_team and str(meta_team).strip():
+        return str(meta_team).strip()
+    return _team_slug_map(edition).get(team_slug, _prettify_slug(team_slug))
+
+
+def list_all_saves() -> list[dict]:
+    root = career_save_root()
+    if not root.is_dir():
+        return []
+
+    saves: list[dict] = []
+    for edition_dir in sorted(root.iterdir(), key=lambda p: p.name):
+        if not edition_dir.is_dir():
+            continue
+        try:
+            edition = int(edition_dir.name)
+        except ValueError:
+            continue
+
+        for team_dir in sorted(team_dir for team_dir in edition_dir.iterdir() if team_dir.is_dir()):
+            team_slug = team_dir.name
+            for profile_dir in sorted(p for p in team_dir.iterdir() if p.is_dir()):
+                mp = profile_dir / "meta.csv"
+                if not mp.is_file():
+                    continue
+                try:
+                    meta = pd.read_csv(mp, low_memory=False)
+                    if meta.empty:
+                        continue
+                    row = meta.iloc[0].to_dict()
+                    meta_team = row.get("team")
+                    saves.append(
+                        {
+                            "edition": edition,
+                            "team": resolve_team_name(edition, team_slug, meta_team),
+                            "teamSlug": team_slug,
+                            "profileId": str(row.get("profileId") or profile_dir.name),
+                            "profileName": str(row.get("profileName") or profile_dir.name),
+                            "season": int(row.get("season") or 1),
+                            "updatedAt": str(row.get("updatedAt") or ""),
+                        }
+                    )
+                except Exception:
+                    continue
+
+    saves.sort(key=lambda item: item.get("updatedAt") or "", reverse=True)
+    return saves
 
 
 def list_profiles(edition: int, team: str) -> list[dict]:
@@ -222,6 +290,7 @@ def save_state(
             {
                 "profileId": str(profile_id),
                 "profileName": str(profile_name or profile_id),
+                "team": str(team),
                 "season": int(state.season),
                 "updatedAt": updated_at,
             }

@@ -1,6 +1,7 @@
 import { fetchClubNarrative } from "../api.js";
 import { escapeHtml } from "../ui.js";
 import { assertCareerReady, markSectionReady, runSectionLoader } from "../ui/section-loader.js";
+import { bindSectionNav } from "../ui/section-nav.js";
 import { renderSectionShell, renderStatus } from "./section-shell.js";
 
 const storylineLabels = {
@@ -46,18 +47,35 @@ export async function renderJournal({ career }) {
     career,
     title: "Career Narrative",
     description: "Auto-generated storylines, arcs, and board expectations for your save.",
-    content: `
-      <div id="journal-loading"></div>
-      <div id="journal-content" hidden></div>
-    `,
+    defaultPane: "storylines",
+    panes: [
+      {
+        id: "storylines",
+        label: "Storylines",
+        icon: "book",
+        content: `
+          <div id="journal-loading"></div>
+          <div id="journal-storylines-root" hidden></div>
+        `,
+      },
+      {
+        id: "objectives",
+        label: "Board objectives",
+        icon: "target",
+        content: `<div id="journal-objectives-root"></div>`,
+      },
+    ],
   });
 }
 
 export function bindJournal({ career, scope }) {
   const loading = document.getElementById("journal-loading");
-  const content = document.getElementById("journal-content");
+  const storylinesRoot = document.getElementById("journal-storylines-root");
+  const objectivesRoot = document.getElementById("journal-objectives-root");
 
   if (!assertCareerReady(career, loading)) return;
+
+  bindSectionNav("section-nav");
 
   runSectionLoader(scope, loading, async ({ setStep }) => {
     setStep("Generating storylines from squad and timeline data…");
@@ -65,19 +83,24 @@ export function bindJournal({ career, scope }) {
     const storylines = payload.storylines ?? [];
 
     markSectionReady(loading, "Narrative ready", `${storylines.length} storylines · ${payload.suggestedObjectives?.length ?? 0} board objectives`);
-    content.hidden = false;
-    content.innerHTML = `
-      <section class="panel section-panel">
-        <div class="panel-header-inline">
-          <h3>FIFA ${career.edition} storylines</h3>
-          <p class="form-hint">Generated from ${escapeHtml(career.team)} squad profile, era shifts, and cross-edition player movement.</p>
-        </div>
-        <div class="storyline-grid">
-          ${storylines.length ? storylines.map(renderStoryline).join("") : renderStatus("No storylines available for this club.", "muted")}
-        </div>
-      </section>
-      ${renderObjectives(payload.suggestedObjectives)}
-    `;
+
+    if (storylinesRoot) {
+      storylinesRoot.hidden = false;
+      storylinesRoot.innerHTML = `
+        <section class="panel section-panel">
+          <div class="panel-header-inline">
+            <h3>FIFA ${career.edition} storylines</h3>
+            <p class="form-hint">Generated from ${escapeHtml(career.team)} squad profile, era shifts, and cross-edition player movement.</p>
+          </div>
+          <div class="storyline-grid">
+            ${storylines.length ? storylines.map(renderStoryline).join("") : renderStatus("No storylines available for this club.", "muted")}
+          </div>
+        </section>
+      `;
+    }
+    if (objectivesRoot) {
+      objectivesRoot.innerHTML = renderObjectives(payload.suggestedObjectives);
+    }
 
     return payload;
   }, {

@@ -6,6 +6,7 @@ import { escapeHtml, icon } from "../ui.js";
 import { formatLoadError, mountCombobox, renderCombobox } from "../ui/combobox.js";
 import {
   fetchCareerSaveProfiles,
+  fetchCareerSaves,
   fetchHealth,
   saveCareerSaveState,
   fetchRandomClub,
@@ -13,6 +14,27 @@ import {
 } from "../api.js";
 import { bindClubArchive } from "./club-archive.js";
 import { renderClubPicker, formatMoney } from "./section-shell.js";
+
+const SETUP_RESTORE_KEY = "fcm-setup-restore";
+
+function saveSetupRandomRestore(payload) {
+  try {
+    sessionStorage.setItem(SETUP_RESTORE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function consumeSetupRandomRestore() {
+  try {
+    const raw = sessionStorage.getItem(SETUP_RESTORE_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(SETUP_RESTORE_KEY);
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 function renderShell(config, content) {
   return `
@@ -237,6 +259,62 @@ function renderRandomPlayerInfo(player) {
 }
 
 
+function formatSaveDate(iso) {
+  if (!iso) return "";
+  try {
+    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+function renderSavedCareerCard(save, activeCareer) {
+  const isActive =
+    Number(activeCareer?.edition) === Number(save.edition) &&
+    activeCareer?.team === save.team &&
+    (activeCareer?.profileName ?? "Default") === (save.profileName ?? "Default");
+
+  const updatedLabel = formatSaveDate(save.updatedAt);
+  const metaParts = [
+    `FIFA ${save.edition}`,
+    save.profileName && save.profileName !== "Default" ? save.profileName : null,
+    save.season > 1 ? `Season ${save.season}` : null,
+    updatedLabel ? `Updated ${updatedLabel}` : null,
+  ].filter(Boolean);
+
+  return `
+    <button
+      type="button"
+      class="saved-career-card${isActive ? " is-active" : ""}"
+      data-edition="${save.edition}"
+      data-team="${escapeHtml(save.team)}"
+      data-profile-name="${escapeHtml(save.profileName ?? "Default")}"
+    >
+      <span class="saved-career-icon">${icon("shield", "icon-inline")}</span>
+      <span class="saved-career-body">
+        <strong>${escapeHtml(save.team)}</strong>
+        <span>${escapeHtml(metaParts.join(" · "))}</span>
+      </span>
+      <span class="saved-career-arrow">${icon("arrow", "icon-inline")}</span>
+    </button>
+  `;
+}
+
+function renderSavedCareersPanel() {
+  return `
+    <section id="saved-careers-panel" class="panel setup-panel setup-saved-careers">
+      <div class="panel-header">
+        <h2>Your saved careers</h2>
+        <p>Continue a career you started before.</p>
+      </div>
+      <div id="saved-careers-list" class="saved-careers-list">
+        <p class="form-hint">Loading saved careers…</p>
+      </div>
+    </section>
+  `;
+}
+
+
 export async function renderSetup({ config, career }) {
   const editionOptions = config.editions
     .map(
@@ -343,6 +421,8 @@ export async function renderSetup({ config, career }) {
                 </button>
               </form>
             </section>
+
+            ${renderSavedCareersPanel()}
           </div>
 
           <!-- Pane 2: Club Archive -->
@@ -404,6 +484,35 @@ export async function renderSetup({ config, career }) {
   );
 
   return html;
+}
+
+async function loadSavedCareersList(activeCareer, onSelect) {
+  const listEl = document.getElementById("saved-careers-list");
+  if (!listEl) return;
+
+  try {
+    const payload = await fetchCareerSaves();
+    const saves = payload?.saves ?? [];
+
+    if (!saves.length) {
+      listEl.innerHTML = `<p class="form-hint">No saved careers yet. Create one above to get started.</p>`;
+      return;
+    }
+
+    listEl.innerHTML = saves.map((save) => renderSavedCareerCard(save, activeCareer)).join("");
+
+    listEl.querySelectorAll(".saved-career-card").forEach((button) => {
+      button.addEventListener("click", () => {
+        onSelect({
+          edition: Number(button.dataset.edition),
+          team: button.dataset.team,
+          profileName: button.dataset.profileName || "Default",
+        });
+      });
+    });
+  } catch {
+    listEl.innerHTML = `<p class="status status-error">Could not load saved careers. Check that the backend is running.</p>`;
+  }
 }
 
 function updateContinueState() {
@@ -812,6 +921,32 @@ export function bindSetupForm(config, career) {
     navigate("home");
   });
 
+  const resumeSavedCareer = async (save) => {
+    if (!save?.edition || !save?.team) return;
+
+    editionSelect.value = String(save.edition);
+    updateEditionApplyState();
+
+    const profileInput = document.getElementById("profile-name");
+    if (profileInput) {
+      profileInput.value = save.profileName || "Default";
+    }
+
+    await loadForCurrentEdition(save.team);
+    combobox?.setValue(save.team, { notify: true });
+    populateProfileSuggestions(save.team);
+    updateContinueState();
+
+    saveCareer({
+      edition: save.edition,
+      team: save.team,
+      profileName: save.profileName || "Default",
+    });
+    navigate("home");
+  };
+
+  loadSavedCareersList(career, resumeSavedCareer);
+
   // Random Selection tab logic
   const randomClubBtn = document.getElementById("random-club-btn");
   const randomPlayerBtn = document.getElementById("random-player-btn");
@@ -819,6 +954,50 @@ export function bindSetupForm(config, career) {
   const randomResult = document.getElementById("random-result");
 
   if (randomClubBtn && randomPlayerBtn && randomEditionSelect && randomResult) {
+    const persistRandomState = (kind, edition, payload) => {
+      saveSetupRandomRestore({
+        tab: "random",
+        edition,
+        kind,
+        player: kind === "player" ? payload : null,
+        clubData: kind === "club" ? payload : null,
+      });
+    };
+
+    const openClubArchive = (edition, team, kind, payload) => {
+      persistRandomState(kind, edition, payload);
+      navigate("section", {
+        id: "club-archive",
+        origin: "setup",
+        edition,
+        team,
+      });
+    };
+
+    const bindRandomClubResult = (data, edition) => {
+      const inspectBtn = document.getElementById("random-club-inspect-btn");
+      const selectBtn = document.getElementById("random-club-select-btn");
+
+      inspectBtn?.addEventListener("click", () => openClubArchive(edition, data.club, "club", data));
+
+      selectBtn?.addEventListener("click", () => {
+        switchTab("career");
+        const editionSelectEl = document.getElementById("edition-select");
+        if (editionSelectEl) {
+          editionSelectEl.value = edition;
+          editionSelectEl.dispatchEvent(new Event("change"));
+          loadForCurrentEdition(data.club);
+        }
+      });
+    };
+
+    const bindRandomPlayerResult = (player, edition) => {
+      const inspectClubBtn = document.getElementById("random-player-club-inspect-btn");
+      if (inspectClubBtn && player.club) {
+        inspectClubBtn.addEventListener("click", () => openClubArchive(edition, player.club, "player", player));
+      }
+    };
+
     randomClubBtn.addEventListener("click", async () => {
       const edition = Number(randomEditionSelect.value);
       randomResult.innerHTML = `
@@ -831,32 +1010,7 @@ export function bindSetupForm(config, career) {
       try {
         const data = await fetchRandomClub(edition);
         randomResult.innerHTML = renderRandomClubInfo(data);
-
-        const inspectBtn = document.getElementById("random-club-inspect-btn");
-        const selectBtn = document.getElementById("random-club-select-btn");
-
-        if (inspectBtn) {
-          inspectBtn.addEventListener("click", () => {
-            navigate("section", {
-              id: "club-archive",
-              origin: "setup",
-              edition: edition,
-              team: data.club,
-            });
-          });
-        }
-
-        if (selectBtn) {
-          selectBtn.addEventListener("click", () => {
-            switchTab("career");
-            const editionSelect = document.getElementById("edition-select");
-            if (editionSelect) {
-              editionSelect.value = edition;
-              editionSelect.dispatchEvent(new Event("change"));
-              loadForCurrentEdition(data.club);
-            }
-          });
-        }
+        bindRandomClubResult(data, edition);
       } catch (error) {
         randomResult.innerHTML = `
           <div class="panel section-panel" style="text-align: center; padding: 2rem; border-color: var(--line);">
@@ -878,18 +1032,7 @@ export function bindSetupForm(config, career) {
       try {
         const player = await fetchRandomPlayer(edition);
         randomResult.innerHTML = renderRandomPlayerInfo(player);
-
-        const inspectClubBtn = document.getElementById("random-player-club-inspect-btn");
-        if (inspectClubBtn && player.club) {
-          inspectClubBtn.addEventListener("click", () => {
-            navigate("section", {
-              id: "club-archive",
-              origin: "setup",
-              edition: edition,
-              team: player.club,
-            });
-          });
-        }
+        bindRandomPlayerResult(player, edition);
       } catch (error) {
         randomResult.innerHTML = `
           <div class="panel section-panel" style="text-align: center; padding: 2rem; border-color: var(--line);">
@@ -898,6 +1041,19 @@ export function bindSetupForm(config, career) {
         `;
       }
     });
+
+    const restore = consumeSetupRandomRestore();
+    if (restore?.tab === "random") {
+      switchTab("random");
+      if (restore.edition) randomEditionSelect.value = String(restore.edition);
+      if (restore.kind === "player" && restore.player) {
+        randomResult.innerHTML = renderRandomPlayerInfo(restore.player);
+        bindRandomPlayerResult(restore.player, restore.edition);
+      } else if (restore.kind === "club" && restore.clubData) {
+        randomResult.innerHTML = renderRandomClubInfo(restore.clubData);
+        bindRandomClubResult(restore.clubData, restore.edition);
+      }
+    }
   }
 
   checkBackendStatus();

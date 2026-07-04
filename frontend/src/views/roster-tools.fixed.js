@@ -2,6 +2,7 @@ import { fetchClubNarrative, fetchSigningSuggestions, fetchClubArchive } from ".
 import { escapeHtml } from "../ui.js";
 import { renderLoadComplete, renderLoadingPanel, startLoadTimer } from "../ui/loading.js";
 import { assertCareerReady } from "../ui/section-loader.js";
+import { bindSectionNav } from "../ui/section-nav.js";
 import { searchPlayers } from "../utils/csv.js";
 import {
   formatMoney,
@@ -110,80 +111,104 @@ export async function renderRosterTools({ config, career }) {
     career,
     title: "Roster Tools",
     description: "Search players and explore signing suggestions that fit your club.",
-    content: `
-      <section class="panel section-panel roster-panel">
-        <div class="tab-row">
-          <button type="button" class="tab-btn tab-btn-active" data-tab="search">Player search</button>
-          <button type="button" class="tab-btn" data-tab="suggestions">Signing suggestions</button>
-        </div>
-
-        <div id="tab-search" class="tab-panel">
-          <label class="field">
-            <span>Player search · FIFA ${career.edition}</span>
-            <input id="roster-search" type="search" placeholder="Name, club, nationality..." autocomplete="off" />
-          </label>
-          <p id="roster-status" class="status" aria-live="polite">Type at least 2 characters to search.</p>
-          <div id="roster-results"></div>
-        </div>
-
-        <div id="tab-suggestions" class="tab-panel" hidden>
-          <section id="nationality-breakdown" class="panel section-panel" style="margin-bottom:1rem;">
-            <h3>Nationality breakdown (all editions)</h3>
-            <div id="nationality-breakdown-body" class="form-hint">Load suggestions to view nationality counts per edition.</div>
+    defaultPane: "search",
+    panes: [
+      {
+        id: "search",
+        label: "Player search",
+        icon: "table",
+        content: `
+          <section class="panel section-panel roster-panel">
+            <label class="field">
+              <span>Player search · FIFA ${career.edition}</span>
+              <input id="roster-search" type="search" placeholder="Name, club, nationality..." autocomplete="off" />
+            </label>
+            <p id="roster-status" class="status" aria-live="polite">Type at least 2 characters to search.</p>
+            <div id="roster-results"></div>
           </section>
-
-          <div class="form-grid roster-budget-row" style="grid-template-columns: repeat(4, minmax(0, 1fr));">
-            <label class="field">
-              <span>Max transfer value (€)</span>
-              <input id="suggestion-budget" type="number" min="0" step="100000" placeholder="Filled from generated club budget" value="" />
-            </label>
-            <label class="field">
-              <span>Max weekly wage (€)</span>
-              <input id="suggestion-wage" type="number" min="0" step="1000" placeholder="Optional" value="" />
-            </label>
-            <label class="field">
-              <span>Position search</span>
-              <input id="suggestion-position-search" type="search" placeholder="e.g. ST, CAM, CB" autocomplete="off" />
-            </label>
-            <div class="form-actions">
-              <button type="button" id="load-suggestions" class="btn btn-primary">Load suggestions</button>
+        `,
+      },
+      {
+        id: "suggestions-setup",
+        label: "Sign suggestions",
+        icon: "target",
+        content: `
+          <section class="panel section-panel">
+            <div class="panel-header-inline">
+              <h3>Signing filters</h3>
+              <p class="form-hint">Set budget limits and load suggestions — budget is prefilled from club context.</p>
             </div>
-          </div>
-          <p id="suggestions-status" class="status" aria-live="polite">Open this tab and load suggestions — budget is prefilled from generated club context.</p>
-          <div id="suggestions-loading" hidden></div>
-
-          <div class="form-grid" style="align-items:center; margin-top:0.5rem;">
-            <label class="field field-inline">
-              <span>Exclude free agents</span>
-              <input id="exclude-free-agents" type="checkbox" />
-            </label>
-            <div class="form-hint" style="margin-top:0.25rem; grid-column: 1 / -1;">Toggle to remove players with missing price/wage (free agents) from "Other players".</div>
-          </div>
-
-          <div class="tab-row">
-            <button type="button" class="tab-btn tab-btn-active" data-sug-tab="ex">Ex-players</button>
-            <button type="button" class="tab-btn" data-sug-tab="future">Future players</button>
-            <button type="button" class="tab-btn" data-sug-tab="other">Other players</button>
-          </div>
-
-          <section id="special-suggestions" class="panel section-panel" style="margin-top:1rem;">
+            <div class="form-grid roster-budget-row" style="grid-template-columns: repeat(4, minmax(0, 1fr));">
+              <label class="field">
+                <span>Max transfer value (€)</span>
+                <input id="suggestion-budget" type="number" min="0" step="100000" placeholder="Filled from generated club budget" value="" />
+              </label>
+              <label class="field">
+                <span>Max weekly wage (€)</span>
+                <input id="suggestion-wage" type="number" min="0" step="1000" placeholder="Optional" value="" />
+              </label>
+              <label class="field">
+                <span>Position search</span>
+                <input id="suggestion-position-search" type="search" placeholder="e.g. ST, CAM, CB" autocomplete="off" />
+              </label>
+              <div class="form-actions">
+                <button type="button" id="load-suggestions" class="btn btn-primary">Load suggestions</button>
+              </div>
+            </div>
+            <p id="suggestions-status" class="status" aria-live="polite">Load suggestions to scan ex-players, future arrivals, and other signings.</p>
+            <div id="suggestions-loading" hidden></div>
+            <div class="form-grid" style="align-items:center; margin-top:0.5rem;">
+              <label class="field field-inline">
+                <span>Exclude free agents</span>
+                <input id="exclude-free-agents" type="checkbox" />
+              </label>
+              <div class="form-hint" style="margin-top:0.25rem; grid-column: 1 / -1;">Removes players with missing price/wage from "Other players".</div>
+            </div>
+            <section id="nationality-breakdown" class="panel section-panel" style="margin-top:1rem;">
+              <h3>Nationality breakdown (all editions)</h3>
+              <div id="nationality-breakdown-body" class="form-hint">Load suggestions to view nationality counts per edition.</div>
+            </section>
+          </section>
+        `,
+      },
+      {
+        id: "ex",
+        label: "Ex-players",
+        icon: "archive",
+        content: `<section class="panel section-panel"><div id="ex-players-results"></div></section>`,
+      },
+      {
+        id: "future",
+        label: "Future players",
+        icon: "arrow",
+        content: `<section class="panel section-panel"><div id="future-players-results"></div></section>`,
+      },
+      {
+        id: "other",
+        label: "Other players",
+        icon: "users",
+        content: `<section class="panel section-panel"><div id="other-players-results"></div></section>`,
+      },
+      {
+        id: "special",
+        label: "Special picks",
+        icon: "shield",
+        content: `
+          <section id="special-suggestions" class="panel section-panel">
             <div class="panel-header-inline">
               <h3 id="special-suggestions-title">Special suggestions</h3>
-              <p id="special-suggestions-hint" class="form-hint">Players selected based on your club's dominant nationalities.</p>
+              <p id="special-suggestions-hint" class="form-hint">Top picks scored by dominant nationalities and club connection.</p>
+            </div>
+            <div class="tab-row">
+              <button type="button" class="tab-btn tab-btn-active" data-special-source="ex">Ex-players</button>
+              <button type="button" class="tab-btn" data-special-source="future">Future players</button>
+              <button type="button" class="tab-btn" data-special-source="other">Other players</button>
             </div>
             <div id="special-suggestions-body"></div>
           </section>
-
-          <div id="tab-suggestions-results">
-            <div id="sug-tab-ex" class="tab-panel"><div id="ex-players-results"></div></div>
-            <div id="sug-tab-future" class="tab-panel" hidden><div id="future-players-results"></div></div>
-            <div id="sug-tab-other" class="tab-panel" hidden>
-              <div id="other-players-results"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-    `,
+        `,
+      },
+    ],
   });
 }
 
@@ -205,6 +230,14 @@ export function bindRosterTools({ config, career, scope }) {
   const wageInput = document.getElementById("suggestion-wage");
 
   if (!assertCareerReady(career, suggestionsStatus)) return;
+
+  bindSectionNav("section-nav", {
+    onActivate: (paneId) => {
+      if (paneId === "ex" || paneId === "future" || paneId === "other") {
+        activeSugTab = paneId;
+      }
+    },
+  });
 
   let lastExPlayers = [];
   let lastFuturePlayers = [];
@@ -251,7 +284,6 @@ export function bindRosterTools({ config, career, scope }) {
       return;
     }
 
-    // Update title and hint based on active sub-tab
     const titleEl = document.getElementById("special-suggestions-title");
     const hintEl = document.getElementById("special-suggestions-hint");
     if (titleEl && hintEl) {
@@ -412,23 +444,12 @@ export function bindRosterTools({ config, career, scope }) {
     })
     .catch(() => {});
 
-  document.querySelectorAll("[data-tab]").forEach((button) => {
+  document.querySelectorAll("[data-special-source]").forEach((button) => {
     button.addEventListener("click", () => {
-      const tab = button.getAttribute("data-tab");
-      document.querySelectorAll("[data-tab]").forEach((el) => el.classList.toggle("tab-btn-active", el.getAttribute("data-tab") === tab));
-      document.getElementById("tab-search").hidden = tab !== "search";
-      document.getElementById("tab-suggestions").hidden = tab !== "suggestions";
-    });
-  });
-
-  document.querySelectorAll("[data-sug-tab]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const tab = button.getAttribute("data-sug-tab");
-      activeSugTab = tab;
-      document.querySelectorAll("[data-sug-tab]").forEach((el) => el.classList.toggle("tab-btn-active", el.getAttribute("data-sug-tab") === tab));
-      document.getElementById("sug-tab-ex").hidden = tab !== "ex";
-      document.getElementById("sug-tab-future").hidden = tab !== "future";
-      document.getElementById("sug-tab-other").hidden = tab !== "other";
+      activeSugTab = button.getAttribute("data-special-source") || "ex";
+      document.querySelectorAll("[data-special-source]").forEach((el) =>
+        el.classList.toggle("tab-btn-active", el === button),
+      );
       renderSpecial();
     });
   });
