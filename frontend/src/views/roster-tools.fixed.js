@@ -1,5 +1,6 @@
 import { fetchClubNarrative, fetchSigningSuggestions, fetchClubArchive } from "../api.js";
 import { escapeHtml } from "../ui.js";
+import { bindGenAiButton } from "../ui/genai.js";
 import { renderLoadComplete, renderLoadingPanel, startLoadTimer } from "../ui/loading.js";
 import { assertCareerReady } from "../ui/section-loader.js";
 import { bindSectionNav } from "../ui/section-nav.js";
@@ -160,7 +161,7 @@ export async function renderRosterTools({ config, career }) {
             <div class="form-grid" style="align-items:center; margin-top:0.5rem;">
               <label class="field field-inline">
                 <span>Exclude free agents</span>
-                <input id="exclude-free-agents" type="checkbox" />
+                <input id="exclude-free-agents" type="checkbox" checked/>
               </label>
               <div class="form-hint" style="margin-top:0.25rem; grid-column: 1 / -1;">Removes players with missing price/wage from "Other players".</div>
             </div>
@@ -196,13 +197,18 @@ export async function renderRosterTools({ config, career }) {
         content: `
           <section id="special-suggestions" class="panel section-panel">
             <div class="panel-header-inline">
-              <h3 id="special-suggestions-title">Special suggestions</h3>
-              <p id="special-suggestions-hint" class="form-hint">Top picks scored by dominant nationalities and club connection.</p>
+              <div>
+                <h3 id="special-suggestions-title">Special suggestions</h3>
+                <p id="special-suggestions-hint" class="form-hint">Top picks scored by dominant nationalities and club connection.</p>
+              </div>
+              <button type="button" class="btn btn-primary" id="special-genai-btn">AI sign suggestions (10)</button>
             </div>
+            <div id="special-genai-status"></div>
             <div class="tab-row">
               <button type="button" class="tab-btn tab-btn-active" data-special-source="ex">Ex-players</button>
               <button type="button" class="tab-btn" data-special-source="future">Future players</button>
               <button type="button" class="tab-btn" data-special-source="other">Other players</button>
+              <button type="button" class="tab-btn" data-special-source="ai">AI picks</button>
             </div>
             <div id="special-suggestions-body"></div>
           </section>
@@ -243,6 +249,7 @@ export function bindRosterTools({ config, career, scope }) {
   let lastFuturePlayers = [];
   let lastOtherPlayers = [];
   let lastTimeline = [];
+  let lastAiSignings = [];
   let excludeFreeAgents = false;
   let positionSearchQuery = "";
   let activeSugTab = "ex";
@@ -279,13 +286,26 @@ export function bindRosterTools({ config, career, scope }) {
   };
 
   const renderSpecial = () => {
+    const titleEl = document.getElementById("special-suggestions-title");
+    const hintEl = document.getElementById("special-suggestions-hint");
+
+    if (activeSugTab === "ai") {
+      if (titleEl && hintEl) {
+        titleEl.textContent = "AI sign suggestions";
+        hintEl.textContent = "Ten offline AI picks from your signing pool, budget, and club context.";
+      }
+      specialSuggestionsBody.innerHTML = renderSuggestionTable(lastAiSignings, {
+        emptyMessage: "Click “AI sign suggestions (10)” to generate offline picks.",
+        reasonLabel: "AI pick",
+      });
+      return;
+    }
+
     if (!lastTimeline || !lastTimeline.length) {
       specialSuggestionsBody.innerHTML = '<p class="form-hint">Load suggestions to compute special suggestions.</p>';
       return;
     }
 
-    const titleEl = document.getElementById("special-suggestions-title");
-    const hintEl = document.getElementById("special-suggestions-hint");
     if (titleEl && hintEl) {
       if (activeSugTab === "ex") {
         titleEl.textContent = "Special suggestions (Ex-players)";
@@ -452,6 +472,30 @@ export function bindRosterTools({ config, career, scope }) {
       );
       renderSpecial();
     });
+  });
+
+  bindGenAiButton({
+    btn: document.getElementById("special-genai-btn"),
+    statusRoot: document.getElementById("special-genai-status"),
+    career,
+    scope: "signings",
+    extraPayload: () => {
+      const maxValue = Number(budgetInput?.value);
+      const maxWage = Number(wageInput?.value);
+      return {
+        maxValue: Number.isFinite(maxValue) && maxValue > 0 ? maxValue : null,
+        maxWage: Number.isFinite(maxWage) && maxWage > 0 ? maxWage : null,
+        position: suggestionPositionSearchInput?.value.trim() || null,
+      };
+    },
+    onSuccess: (result) => {
+      lastAiSignings = result?.signingSuggestions ?? [];
+      activeSugTab = "ai";
+      document.querySelectorAll("[data-special-source]").forEach((el) => {
+        el.classList.toggle("tab-btn-active", el.getAttribute("data-special-source") === "ai");
+      });
+      renderSpecial();
+    },
   });
 
   input?.addEventListener("input", () => {

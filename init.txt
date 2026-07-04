@@ -8,6 +8,13 @@ pip install -r requirements.txt
 # 4. Start the FastAPI backend
 uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 
+----- Optional: Offline AI (Ollama)
+# Install Ollama from https://ollama.com, then pull a small model:
+ollama pull llama3.2:3b
+# Optional env vars: OLLAMA_BASE_URL, OLLAMA_MODEL (default llama3.2:3b)
+# If you have phi3:mini installed. For faster runs, you can set:
+export OLLAMA_MODEL=phi3:mini
+
 ----- Terminal 2 POWERSHELL: Frontend (Vite)
 # 1. Navigate to the frontend directory
 cd frontend

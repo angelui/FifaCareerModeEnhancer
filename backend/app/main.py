@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .config import editions, load_app_config
-from . import bootstrap, data
+from . import bootstrap, data, genai
 from .saves import CareerSaveState, list_all_saves, list_profiles, load_state, save_state
 
 app = FastAPI(
@@ -276,4 +276,38 @@ def random_player(edition: int) -> dict:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
+
+
+@app.get("/api/genai/status")
+def genai_status() -> dict:
+    return genai.check_status()
+
+
+class GenAiEnhancePayload(BaseModel):
+    edition: int
+    team: str
+    profileId: str | None = None
+    scope: str = "all"
+    maxValue: int | None = None
+    maxWage: int | None = None
+    position: str | None = None
+
+
+@app.post("/api/genai/enhance")
+def genai_enhance(payload: GenAiEnhancePayload = Body(...)) -> dict:
+    _ensure_edition(int(payload.edition))
+    try:
+        return genai.enhance(
+            edition=int(payload.edition),
+            club=payload.team.strip(),
+            profile_id=(payload.profileId or "").strip() or None,
+            scope=(payload.scope or "all").strip().lower(),
+            max_value=int(payload.maxValue) if payload.maxValue is not None else None,
+            max_wage=int(payload.maxWage) if payload.maxWage is not None else None,
+            position=(payload.position or "").strip() or None,
+        )
+    except ConnectionError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 

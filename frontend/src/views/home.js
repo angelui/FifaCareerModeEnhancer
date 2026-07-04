@@ -1,4 +1,5 @@
 import { escapeHtml, icon } from "../ui.js";
+import { isCareerReady } from "../state.js";
 
 export async function renderHome({ config, career }) {
   const sectionCards = config.sections
@@ -28,18 +29,27 @@ export async function renderHome({ config, career }) {
       <div class="ambient ambient-a"></div>
       <div class="ambient ambient-b"></div>
 
-      <header class="home-header panel">
+      <header class="home-header">
         <div class="home-header-top">
           <button type="button" class="btn btn-ghost" id="change-career">Change club</button>
+          ${
+            isCareerReady(career)
+              ? `<p class="eyebrow home-header-info">${escapeHtml(career.team)} · FIFA ${escapeHtml(String(career.edition))}</p>`
+              : ""
+          }
         </div>
+      </header>
+ 
+      <br>
+      <main class="home-grid">
+        ${sectionCards}
+      </main>
+      <br>
+      <header class="home-header">
         <div id="home-career-panel" class="home-career-panel">
           <p class="form-hint">Loading career overview…</p>
         </div>
       </header>
-
-      <main class="home-grid">
-        ${sectionCards}
-      </main>
     </div>
   `;
 }

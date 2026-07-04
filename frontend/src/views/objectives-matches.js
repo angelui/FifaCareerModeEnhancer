@@ -1,6 +1,7 @@
 import { createId, loadCareerData, saveCareerData } from "../career-data.js";
 import { fetchClubNarrative, fetchClubsForEdition, fetchFixtureHints } from "../api.js";
 import { escapeHtml } from "../ui.js";
+import { bindGenAiButton } from "../ui/genai.js";
 import { mountCombobox, renderCombobox } from "../ui/combobox.js";
 import { renderLoadComplete, renderLoadingPanel, startLoadTimer } from "../ui/loading.js";
 import { assertCareerReady } from "../ui/section-loader.js";
@@ -242,6 +243,17 @@ export async function renderObjectivesMatches({ career }) {
             </div>
             <div id="generated-objectives-body"></div>
           </section>
+          <section id="objectives-genai-panel" class="panel section-panel genai-panel">
+            <div class="panel-header-inline">
+              <div>
+                <h3>AI board objectives</h3>
+                <p class="form-hint">Offline generation via Ollama — click to create fresh objectives.</p>
+              </div>
+              <button type="button" class="btn btn-primary" id="objectives-genai-btn">Enhance with AI</button>
+            </div>
+            <div id="objectives-genai-status"></div>
+            <div id="objectives-genai-body"></div>
+          </section>
         `,
       },
       {
@@ -421,6 +433,71 @@ export async function bindObjectivesMatches({ career, scope }) {
 
   let opponentPicker = null;
   let suggestedObjectives = [];
+  let aiSuggestedObjectives = [];
+
+  const renderAiObjectives = () => {
+    const aiBody = document.getElementById("objectives-genai-body");
+    if (!aiBody) return;
+
+    if (!aiSuggestedObjectives.length) {
+      aiBody.innerHTML = "";
+      return;
+    }
+
+    aiBody.innerHTML = `
+      <ul class="item-list">
+        ${aiSuggestedObjectives
+          .map(
+            (objective, index) => `
+              <li class="list-item ${objective.gold ? "list-item-gold" : ""}">
+                <span>${escapeHtml(objective.text)} <span class="pill pill-ai">AI</span></span>
+                <button type="button" class="btn btn-ghost" data-action="import-ai-objective" data-index="${index}">Track</button>
+              </li>
+            `,
+          )
+          .join("")}
+      </ul>
+    `;
+  };
+
+  document.getElementById("objectives-genai-panel")?.addEventListener("click", (event) => {
+    const target = event.target.closest('[data-action="import-ai-objective"]');
+    if (!target) return;
+
+    const index = Number(target.getAttribute("data-index"));
+    const objective = aiSuggestedObjectives[index];
+    if (!objective) return;
+
+    const exists = state.objectives.some((item) => item.text === objective.text);
+    if (exists) {
+      target.textContent = "Tracked";
+      target.disabled = true;
+      return;
+    }
+
+    state.objectives.unshift({
+      id: createId("obj"),
+      text: objective.text,
+      gold: Boolean(objective.gold),
+      done: false,
+      season: state.season,
+    });
+    persist();
+    refreshObjectives();
+    target.textContent = "Tracked";
+    target.disabled = true;
+  });
+
+  bindGenAiButton({
+    btn: document.getElementById("objectives-genai-btn"),
+    statusRoot: document.getElementById("objectives-genai-status"),
+    career,
+    scope: "objectives",
+    onSuccess: (result) => {
+      aiSuggestedObjectives = result?.objectives ?? [];
+      renderAiObjectives();
+    },
+  });
 
   document.getElementById("match-form")?.addEventListener("submit", (event) => {
     event.preventDefault();

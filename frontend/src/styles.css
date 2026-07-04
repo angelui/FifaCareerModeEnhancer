@@ -750,7 +750,7 @@ h1 {
 }
 
 .home-header {
-  margin-bottom: 2rem;
+  margin-top: 2rem;
   padding: 1.35rem 1.5rem;
   background: var(--bg-elevated);
   border: 1px solid var(--line);
@@ -760,8 +760,15 @@ h1 {
 
 .home-header-top {
   display: flex;
-  justify-content: flex-start;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 1.25rem;
+}
+
+.home-header-info {
+  margin: 0;
+  text-align: right;
 }
 
 .home-career-panel {
@@ -1573,6 +1580,37 @@ h1 {
 .narrative-card-featured {
   border-color: rgba(124, 227, 168, 0.35);
   background: linear-gradient(180deg, rgba(124, 227, 168, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.narrative-card-ai {
+  border-color: rgba(147, 197, 253, 0.35);
+  background: linear-gradient(180deg, rgba(147, 197, 253, 0.07), rgba(255, 255, 255, 0.02));
+}
+
+.narrative-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.narrative-card-head .eyebrow {
+  margin: 0;
+}
+
+.pill-ai {
+  background: rgba(147, 197, 253, 0.18);
+  color: #bfdbfe;
+  border: 1px solid rgba(147, 197, 253, 0.35);
+}
+
+.genai-panel {
+  margin-top: 1rem;
+}
+
+.narrative-list-gold {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .narrative-card h3,

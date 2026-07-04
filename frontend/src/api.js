@@ -165,3 +165,35 @@ export async function fetchAllPlayersForEdition(edition) {
   return apiFetch(`/editions/${normalizedEdition}/all-players`, {}, { timeoutMs: 120000 });
 }
 
+export async function fetchGenAiStatus() {
+  return apiFetch("/genai/status", {}, { timeoutMs: 10000 });
+}
+
+export async function fetchGenAiEnhance({
+  edition,
+  team,
+  profileId,
+  scope = "all",
+  maxValue = null,
+  maxWage = null,
+  position = null,
+}) {
+  return apiFetch(
+    "/genai/enhance",
+    {},
+    {
+      method: "POST",
+      body: {
+        edition: Number(edition),
+        team: team ?? "",
+        profileId: profileId ?? undefined,
+        scope: scope ?? "all",
+        maxValue: maxValue ?? undefined,
+        maxWage: maxWage ?? undefined,
+        position: position ?? undefined,
+      },
+      timeoutMs: 300000,
+    },
+  );
+}
+
